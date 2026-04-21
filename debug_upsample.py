@@ -29,7 +29,9 @@ if __name__ == "__main__":
 
     model_name = "black-forest-labs/FLUX.2-dev"
     config = AutoConfig.from_pretrained(model_name, subfolder="text_encoder")
-    encoder = MistralEncoderModel(config).to("cuda").to(torch.bfloat16)
+    with torch.device("cuda"):
+        encoder = MistralEncoderModel(config)
+    encoder = encoder.to(torch.bfloat16)
 
     from safetensors.torch import load_file
     from vllm_omni.model_executor.model_loader.weight_utils import download_weights_from_hf_specific
