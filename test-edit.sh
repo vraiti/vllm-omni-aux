@@ -2,6 +2,7 @@
 set -euo pipefail
 
 REPO_DIR="${1:?Usage: $0 <vllm-omni-repo-path>}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 VENV_DIR="${REPO_DIR}/../venv"
 
 if [[ -f "$VENV_DIR/bin/activate" ]]; then
@@ -17,7 +18,7 @@ cd "$REPO_DIR"
 
 python examples/offline_inference/image_to_image/image_edit.py \
     --model black-forest-labs/FLUX.2-dev \
-    --image sample-input.png \
+    --image "$SCRIPT_DIR/sample-input.png" \
     --prompt "replace the bunny in the image with dog." \
     --output outputs/flux2-dev-edit.png \
     --seed 42 \
