@@ -11,7 +11,7 @@ if __name__ == "__main__":
     omni = Omni(model="black-forest-labs/FLUX.2-dev", parallel_config=DiffusionParallelConfig(tensor_parallel_size=4))
     os.makedirs("outputs/upsample", exist_ok=True)
 
-    for mode, prompt, image in [("t2i", "a cat sitting on a windowsill", None), ("i2i", "replace the bunny with a dog", img)]:
+    for mode, prompt, image in [("t2i", "a cat sitting on a windowsill", None), ("i2i", "replace the bunny with a dog", [img])]:
         for label, temp in [("baseline", None), ("upsampled", 0.15)]:
             out = omni.generate(
                 {"prompt": prompt, "multi_modal_data": {"image": image}},
