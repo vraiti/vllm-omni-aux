@@ -6,32 +6,21 @@ from vllm_omni.entrypoints.omni import Omni
 from vllm_omni.inputs.data import OmniDiffusionSamplingParams
 from vllm_omni.platforms import current_omni_platform
 
-MODEL = "black-forest-labs/FLUX.2-dev"
-T2I_PROMPT = "a cat sitting on a windowsill"
-I2I_PROMPT = "replace the bunny with a dog"
-IMAGE_PATH = os.path.join(os.path.dirname(__file__), "sample-input.png")
-TEMPERATURE = 0.15
-SEED = 42
-STEPS = 50
-GUIDANCE = 4.0
-TP_SIZE = 4
-OUTPUT_DIR = "outputs/upsample"
-
 if __name__ == "__main__":
-    img = Image.open(IMAGE_PATH).convert("RGB")
-    omni = Omni(model=MODEL, parallel_config=DiffusionParallelConfig(tensor_parallel_size=TP_SIZE))
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    img = Image.open(os.path.join(os.path.dirname(__file__), "sample-input.png")).convert("RGB")
+    omni = Omni(model="black-forest-labs/FLUX.2-dev", parallel_config=DiffusionParallelConfig(tensor_parallel_size=4))
+    os.makedirs("outputs/upsample", exist_ok=True)
 
-    for mode, prompt, image in [("t2i", T2I_PROMPT, None), ("i2i", I2I_PROMPT, img)]:
-        for label, temp in [("baseline", None), ("upsampled", TEMPERATURE)]:
-            extra = {"caption_upsample_temperature": temp} if temp else {}
+    for mode, prompt, image in [("t2i", "a cat sitting on a windowsill", None), ("i2i", "replace the bunny with a dog", img)]:
+        for label, temp in [("baseline", None), ("upsampled", 0.15)]:
             out = omni.generate(
                 {"prompt": prompt, "multi_modal_data": {"image": image}},
                 OmniDiffusionSamplingParams(
-                    generator=torch.Generator(device=current_omni_platform.device_type).manual_seed(SEED),
-                    guidance_scale=GUIDANCE, num_inference_steps=STEPS, extra_args=extra,
+                    generator=torch.Generator(device=current_omni_platform.device_type).manual_seed(42),
+                    guidance_scale=4.0, num_inference_steps=50,
+                    extra_args={"caption_upsample_temperature": temp} if temp else {},
                 ),
             )
-            path = os.path.join(OUTPUT_DIR, f"flux2-{mode}-{label}.png")
+            path = os.path.join("outputs/upsample", f"flux2-{mode}-{label}.png")
             out[0].request_output.images[0].save(path)
             print(f"[{mode}/{label}] {os.path.abspath(path)}")
