@@ -30,9 +30,8 @@ if __name__ == "__main__":
 
     model_name = "black-forest-labs/FLUX.2-dev"
     config = AutoConfig.from_pretrained(model_name, subfolder="text_encoder")
-    with torch.device("cuda"):
+    with torch.device("meta"):
         encoder = MistralEncoderModel(config)
-    encoder = encoder.to(torch.bfloat16)
 
     from safetensors.torch import load_file
     from vllm_omni.model_executor.model_loader.weight_utils import download_weights_from_hf_specific
@@ -44,6 +43,7 @@ if __name__ == "__main__":
         if f.endswith(".safetensors"):
             weights.extend(load_file(os.path.join(te_dir, f)).items())
     encoder.load_weights(weights)
+    encoder = encoder.to("cuda").to(torch.bfloat16)
 
     from transformers import PixtralProcessor
     processor = PixtralProcessor.from_pretrained(model_name, subfolder="tokenizer")
