@@ -2,6 +2,11 @@
 set -euo pipefail
 
 REPO_DIR="${1:?Usage: $0 <vllm-omni-repo-path>}"
+VENV_DIR="${REPO_DIR}/../venv"
+
+if [[ -f "$VENV_DIR/bin/activate" ]]; then
+    source "$VENV_DIR/bin/activate"
+fi
 
 export FLUX2_DEBUG_DIR=/tmp/flux2_debug
 export HF_TOKEN=$(cat ~/.secret/hf)
