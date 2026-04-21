@@ -2,6 +2,7 @@
 import os, torch
 from PIL import Image
 from transformers import AutoConfig
+from vllm.config import CompilationConfig, DeviceConfig, VllmConfig, set_current_vllm_config
 from vllm_omni.diffusion.distributed.parallel_state import (
     init_distributed_environment,
     initialize_model_parallel,
@@ -21,6 +22,10 @@ if __name__ == "__main__":
 
     init_distributed_environment(world_size=1, rank=0)
     initialize_model_parallel(tensor_parallel_size=1)
+
+    vllm_config = VllmConfig(device_config=DeviceConfig("cuda"), compilation_config=CompilationConfig())
+    ctx = set_current_vllm_config(vllm_config)
+    ctx.__enter__()
 
     model_name = "black-forest-labs/FLUX.2-dev"
     config = AutoConfig.from_pretrained(model_name, subfolder="text_encoder")
