@@ -14,6 +14,7 @@ from diffusers.pipelines.flux2.system_messages import (
 )
 
 if __name__ == "__main__":
+    os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
     os.environ.setdefault("MASTER_ADDR", "127.0.0.1")
     os.environ.setdefault("MASTER_PORT", "29500")
     os.environ.setdefault("RANK", "0")
