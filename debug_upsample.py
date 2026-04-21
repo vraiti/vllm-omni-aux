@@ -5,7 +5,7 @@ to isolate the upsampling behavior.
 """
 import os, torch
 from PIL import Image
-from transformers import AutoModelForCausalLM, PixtralProcessor
+from transformers import Mistral3ForConditionalGeneration, PixtralProcessor
 from diffusers.pipelines.flux2.system_messages import (
     SYSTEM_MESSAGE_UPSAMPLING_I2I,
     SYSTEM_MESSAGE_UPSAMPLING_T2I,
@@ -45,8 +45,8 @@ if __name__ == "__main__":
     os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
     model_name = "black-forest-labs/FLUX.2-dev"
     processor = PixtralProcessor.from_pretrained(model_name, subfolder="tokenizer")
-    model = AutoModelForCausalLM.from_pretrained(
-        model_name, subfolder="text_encoder", torch_dtype=torch.bfloat16, device_map="auto",
+    model = Mistral3ForConditionalGeneration.from_pretrained(
+        model_name, subfolder="text_encoder", dtype=torch.bfloat16, device_map="auto",
     )
     model.eval()
 
