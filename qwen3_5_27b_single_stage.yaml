@@ -1,0 +1,16 @@
+# Qwen/Qwen3.5-27B single-stage LLM deploy.
+#
+# Usage:
+#   vllm-omni serve Qwen/Qwen3.5-27B --omni \
+#       --stage-configs-path qwen3_5_27b_single_stage.yaml
+
+stages:
+  - stage_id: 0
+    gpu_memory_utilization: 0.9
+    tensor_parallel_size: 2
+    max_model_len: 32768
+    devices: "0,1"
+    default_sampling_params:
+      temperature: 0.7
+      top_p: 0.9
+      max_tokens: 4096
