@@ -9,7 +9,7 @@ while true; do
     echo "Server is ready at ${URL}"
     exit 0
   fi
-  if ! pgrep -f 'vllm-omni serve' > /dev/null 2>&1; then
+  if ! pgrep -f 'vllm.* serve' > /dev/null 2>&1; then
     echo "Server process died" >&2
     exit 1
   fi
