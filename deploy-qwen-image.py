@@ -33,8 +33,9 @@ src = re.sub(
     src,
 )
 open(arg_utils, "w").write(src)
+print(f"Patched {arg_utils}: init_timeout={INIT_TIMEOUT}, stage_init_timeout={STAGE_INIT_TIMEOUT}", flush=True)
 
-subprocess.run(
+result = subprocess.run(
     [
         os.path.join(VENV_BIN, "python3"),
         "-m", "vllm_omni.entrypoints.cli.main",
@@ -42,4 +43,7 @@ subprocess.run(
         "--omni", "--port", "8000",
     ],
     env=os.environ,
+    stdout=sys.stdout,
+    stderr=sys.stdout,
 )
+sys.exit(result.returncode)
