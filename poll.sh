@@ -1,29 +1,32 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Usage: ./poll.sh [interval_seconds] [server_pid]
-# Runs on the pod itself (no oc exec).
+# Usage: ./poll.sh <pid> <url> [interval_seconds]
+# Polls a vLLM-Omni server for readiness.
+# Exits 0 when the server responds 200, or 1 if the process dies first.
 
-INTERVAL="${1:-10}"
-SERVER_PID="${2:-}"
+if [ $# -lt 2 ]; then
+  echo "Usage: $0 <pid> <url> [interval_seconds]" >&2
+  exit 2
+fi
+
+SERVER_PID="$1"
+URL="$2"
+INTERVAL="${3:-10}"
 
 while true; do
-  ts=$(date +%H:%M:%S)
-
-  if [ -n "$SERVER_PID" ]; then
-    alive=$(ps -p "$SERVER_PID" -o pid=,stat=,etime=,comm= 2>/dev/null || echo 'DEAD')
-  else
-    alive=$(pgrep -a -f 'vllm-omni|vllm_omni' 2>/dev/null | head -5 || echo 'NO MATCH')
+  if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+    echo "Process $SERVER_PID is dead"
+    exit 1
   fi
 
-  health=$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 http://localhost:8000/health 2>/dev/null || echo 'NOCONN')
+  status=$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "$URL" 2>/dev/null || echo 'NOCONN')
 
-  gpu=$(nvidia-smi --query-gpu=index,memory.used --format=csv,noheader,nounits 2>/dev/null || echo 'N/A')
+  if [ "$status" = "200" ]; then
+    echo "Server ready at $URL"
+    exit 0
+  fi
 
-  log_tail=$(tail -3 /tmp/vllm_server.log 2>/dev/null || echo 'no log')
-
-  printf '\n=== %s ===\nproc: %s\nhealth: %s\ngpu_mem_MiB: %s\nlog:\n%s\n' \
-    "$ts" "$alive" "$health" "$gpu" "$log_tail"
-
+  echo "$(date +%H:%M:%S) pid=$SERVER_PID status=$status"
   sleep "$INTERVAL"
 done
