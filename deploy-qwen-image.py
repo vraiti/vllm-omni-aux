@@ -9,6 +9,7 @@ VENV_BIN = os.path.join(VENV, "bin")
 os.environ["VIRTUAL_ENV"] = VENV
 os.environ["PATH"] = VENV_BIN + ":" + os.environ.get("PATH", "")
 os.environ["HOME"] = "/root"
+os.environ["PYTHONUNBUFFERED"] = "1"
 
 result = subprocess.run(
     [
