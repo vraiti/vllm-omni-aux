@@ -9,9 +9,15 @@ import argparse
 import base64
 import json
 import os
-import sys
+import re
 import time
 import urllib.request
+
+
+def slugify(text: str) -> str:
+    s = text.lower().strip()
+    s = re.sub(r"[^a-z0-9]+", "_", s)
+    return s.strip("_")[:80]
 
 
 def generate(url: str, prompt: str, size: str) -> tuple[bytes, float]:
@@ -35,7 +41,8 @@ def main():
     parser.add_argument("--prompts", default="prompts.txt")
     parser.add_argument("--output-dir", required=True, help="Directory to save PNGs")
     parser.add_argument("--size", default="1024x1024")
-    parser.add_argument("--tag", default="", help="Prefix for output filenames")
+    parser.add_argument("--tag", required=True, choices=["diffusers", "omni"],
+                        help="Suffix for output filenames")
     args = parser.parse_args()
 
     prompts_path = args.prompts
@@ -45,29 +52,16 @@ def main():
         prompts = [line.strip() for line in f if line.strip()]
 
     os.makedirs(args.output_dir, exist_ok=True)
-    prefix = f"{args.tag}_" if args.tag else ""
-    results = []
 
     for i, prompt in enumerate(prompts):
-        fname = f"{prefix}{i:02d}.png"
+        slug = slugify(prompt)
+        fname = f"{slug}_{args.tag}.png"
         out_path = os.path.join(args.output_dir, fname)
         print(f"[{i+1}/{len(prompts)}] {prompt[:60]}...", flush=True)
         img_bytes, elapsed = generate(args.url, prompt, args.size)
         with open(out_path, "wb") as f:
             f.write(img_bytes)
-        results.append({"prompt": prompt, "file": fname, "latency_s": round(elapsed, 3)})
         print(f"  -> {fname} ({elapsed:.1f}s)", flush=True)
-
-    summary = {
-        "url": args.url,
-        "size": args.size,
-        "tag": args.tag,
-        "results": results,
-    }
-    summary_path = os.path.join(args.output_dir, f"{prefix}summary.json")
-    with open(summary_path, "w") as f:
-        json.dump(summary, f, indent=2)
-    print(f"\nSummary written to {summary_path}")
 
 
 if __name__ == "__main__":
