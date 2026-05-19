@@ -9,6 +9,7 @@ stage_args:
     engine_args:
       model_stage: diffusion
       max_num_seqs: 1
+      num_gpus: 2
       profiler_config:
         profiler: torch
         torch_profiler_dir: ./perf
