@@ -12,17 +12,24 @@ from diffusers import Flux2Pipeline
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 
-def load_pipeline(device_ids: list[int], offload: str | None) -> Flux2Pipeline:
-    pipe = Flux2Pipeline.from_pretrained(
-        "black-forest-labs/FLUX.2-dev",
-        torch_dtype=torch.bfloat16,
-    )
-    if offload == "sequential":
-        pipe.enable_sequential_cpu_offload(gpu_id=device_ids[0])
-    elif offload == "none":
-        pipe = pipe.to(f"cuda:{device_ids[0]}")
+def load_pipeline(device_ids: list[int], offload: str) -> Flux2Pipeline:
+    if offload == "none" and len(device_ids) > 1:
+        pipe = Flux2Pipeline.from_pretrained(
+            "black-forest-labs/FLUX.2-dev",
+            torch_dtype=torch.bfloat16,
+            device_map="balanced",
+        )
     else:
-        pipe.enable_model_cpu_offload(gpu_id=device_ids[0])
+        pipe = Flux2Pipeline.from_pretrained(
+            "black-forest-labs/FLUX.2-dev",
+            torch_dtype=torch.bfloat16,
+        )
+        if offload == "sequential":
+            pipe.enable_sequential_cpu_offload(gpu_id=device_ids[0])
+        elif offload == "none":
+            pipe = pipe.to(f"cuda:{device_ids[0]}")
+        else:
+            pipe.enable_model_cpu_offload(gpu_id=device_ids[0])
     return pipe
 
 
