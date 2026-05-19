@@ -8,12 +8,12 @@ import json
 import time
 
 import torch
-from diffusers import FluxPipeline
+from diffusers import Flux2Pipeline
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 
-def load_pipeline(device_ids: list[int], offload: str | None) -> FluxPipeline:
-    pipe = FluxPipeline.from_pretrained(
+def load_pipeline(device_ids: list[int], offload: str | None) -> Flux2Pipeline:
+    pipe = Flux2Pipeline.from_pretrained(
         "black-forest-labs/FLUX.2-dev",
         torch_dtype=torch.bfloat16,
     )
@@ -27,7 +27,7 @@ def load_pipeline(device_ids: list[int], offload: str | None) -> FluxPipeline:
 
 
 class Handler(BaseHTTPRequestHandler):
-    pipe: FluxPipeline
+    pipe: Flux2Pipeline
 
     def do_POST(self):
         if self.path != "/v1/images/generations":
