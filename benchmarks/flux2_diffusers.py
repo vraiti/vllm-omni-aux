@@ -17,12 +17,12 @@ def load_pipeline(device_ids: list[int], offload: str | None) -> Flux2Pipeline:
         "black-forest-labs/FLUX.2-dev",
         torch_dtype=torch.bfloat16,
     )
-    if offload == "model":
-        pipe.enable_model_cpu_offload(gpu_id=device_ids[0])
-    elif offload == "sequential":
+    if offload == "sequential":
         pipe.enable_sequential_cpu_offload(gpu_id=device_ids[0])
-    else:
+    elif offload == "none":
         pipe = pipe.to(f"cuda:{device_ids[0]}")
+    else:
+        pipe.enable_model_cpu_offload(gpu_id=device_ids[0])
     return pipe
 
 
@@ -82,8 +82,8 @@ def main():
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--devices", default="0,1", help="CUDA device IDs")
-    parser.add_argument("--offload", choices=["model", "sequential"], default=None,
-                        help="CPU offload strategy")
+    parser.add_argument("--offload", choices=["model", "sequential", "none"], default="model",
+                        help="CPU offload strategy (default: model)")
     args = parser.parse_args()
 
     device_ids = [int(d) for d in args.devices.split(",")]
