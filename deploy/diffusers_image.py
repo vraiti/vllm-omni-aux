@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Serve FLUX.2-dev using diffusers with a minimal HTTP API."""
+"""Serve any diffusers image generation model with a minimal HTTP API."""
 
 import argparse
 import base64
@@ -8,22 +8,18 @@ import json
 import time
 
 import torch
-from diffusers import Flux2Pipeline
+from diffusers import DiffusionPipeline
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 
-def load_pipeline(device_ids: list[int], offload: str) -> Flux2Pipeline:
+def load_pipeline(model: str, device_ids: list[int], offload: str) -> DiffusionPipeline:
+    kwargs = {"torch_dtype": torch.bfloat16}
     if offload == "none" and len(device_ids) > 1:
-        pipe = Flux2Pipeline.from_pretrained(
-            "black-forest-labs/FLUX.2-dev",
-            torch_dtype=torch.bfloat16,
-            device_map="balanced",
-        )
-    else:
-        pipe = Flux2Pipeline.from_pretrained(
-            "black-forest-labs/FLUX.2-dev",
-            torch_dtype=torch.bfloat16,
-        )
+        kwargs["device_map"] = "balanced"
+
+    pipe = DiffusionPipeline.from_pretrained(model, **kwargs)
+
+    if "device_map" not in kwargs:
         if offload == "sequential":
             pipe.enable_sequential_cpu_offload(gpu_id=device_ids[0])
         elif offload == "none":
@@ -34,7 +30,7 @@ def load_pipeline(device_ids: list[int], offload: str) -> Flux2Pipeline:
 
 
 class Handler(BaseHTTPRequestHandler):
-    pipe: Flux2Pipeline
+    pipe: DiffusionPipeline
 
     def do_POST(self):
         if self.path != "/v1/images/generations":
@@ -45,16 +41,10 @@ class Handler(BaseHTTPRequestHandler):
         prompt = body.get("prompt", "")
         size = body.get("size", "1024x1024")
         w, h = (int(x) for x in size.split("x"))
-        steps = body.get("num_inference_steps", 28)
+        extra = {k: v for k, v in body.items() if k not in ("prompt", "size", "model")}
 
         t0 = time.perf_counter()
-        image = self.pipe(
-            prompt=prompt,
-            width=w,
-            height=h,
-            num_inference_steps=steps,
-            guidance_scale=3.5,
-        ).images[0]
+        image = self.pipe(prompt=prompt, width=w, height=h, **extra).images[0]
         elapsed = time.perf_counter() - t0
 
         buf = io.BytesIO()
@@ -86,16 +76,17 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument("model", help="HuggingFace model ID or local path")
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8000)
-    parser.add_argument("--devices", default="0,1", help="CUDA device IDs")
+    parser.add_argument("--devices", default="0", help="CUDA device IDs (comma-separated)")
     parser.add_argument("--offload", choices=["model", "sequential", "none"], default="model",
                         help="CPU offload strategy (default: model)")
     args = parser.parse_args()
 
     device_ids = [int(d) for d in args.devices.split(",")]
-    print(f"Loading FLUX.2-dev on devices {device_ids}, offload={args.offload}")
-    pipe = load_pipeline(device_ids, args.offload)
+    print(f"Loading {args.model} on devices {device_ids}, offload={args.offload}")
+    pipe = load_pipeline(args.model, device_ids, args.offload)
     Handler.pipe = pipe
 
     server = HTTPServer((args.host, args.port), Handler)
