@@ -14,6 +14,7 @@ import requests
 DEFAULT_URL = "http://localhost:8000"
 DEFAULT_MODEL = "black-forest-labs/FLUX.2-dev"
 DEFAULT_PROMPT = "a red cat sitting on a windowsill"
+DEFAULT_PROMPTS_FILE = os.path.join(os.path.dirname(__file__), "image-prompts.txt")
 
 
 def send_request(url: str, model: str, prompt: str, extra_params: dict, save_image: bool = False) -> dict:
@@ -42,7 +43,8 @@ def main():
     parser = argparse.ArgumentParser(description="Benchmark FLUX.2-dev on vLLM-Omni")
     parser.add_argument("--url", default=DEFAULT_URL, help="Server base URL")
     parser.add_argument("--model", default=DEFAULT_MODEL, help="Model name")
-    parser.add_argument("--prompt", default=DEFAULT_PROMPT, help="Prompt for image generation")
+    parser.add_argument("--prompt", default=None, help="Single prompt (overrides --prompts-file)")
+    parser.add_argument("--prompts-file", default=DEFAULT_PROMPTS_FILE, help="File with one prompt per line")
     parser.add_argument("--warmup", type=int, default=1, help="Number of warmup requests")
     parser.add_argument("--requests", type=int, default=5, help="Number of benchmark requests")
     parser.add_argument("--size", default="1024x1024", help="Image size WxH")
@@ -56,6 +58,12 @@ def main():
     if args.extra:
         extra_params.update(json.loads(args.extra))
 
+    if args.prompt:
+        prompts = [args.prompt]
+    else:
+        with open(args.prompts_file) as f:
+            prompts = [line.strip() for line in f if line.strip()]
+
     try:
         r = requests.get(f"{url}/health", timeout=10)
         r.raise_for_status()
@@ -64,9 +72,10 @@ def main():
         sys.exit(1)
 
     for i in range(args.warmup):
+        prompt = prompts[i % len(prompts)]
         sys.stdout.write(f"  warmup {i + 1}/{args.warmup} ... ")
         sys.stdout.flush()
-        r = send_request(url, args.model, args.prompt, extra_params)
+        r = send_request(url, args.model, prompt, extra_params)
         print(f"{r['status']}  {r['latency']:.2f}s")
 
     save_dir = args.save_images
@@ -76,22 +85,23 @@ def main():
     results = []
     index = {}
     for i in range(args.requests):
+        prompt = prompts[i % len(prompts)]
         sys.stdout.write(f"  request {i + 1}/{args.requests} ... ")
         sys.stdout.flush()
-        r = send_request(url, args.model, args.prompt, extra_params, save_image=bool(save_dir))
-        results.append({"latency": r["latency"], "status": r["status"]})
+        r = send_request(url, args.model, prompt, extra_params, save_image=bool(save_dir))
+        results.append({"latency": r["latency"], "status": r["status"], "prompt": prompt})
         print(f"{r['status']}  {r['latency']:.2f}s")
         if save_dir and "image_bytes" in r:
             fname = f"{i + 1}.png"
             with open(os.path.join(save_dir, fname), "wb") as f:
                 f.write(r["image_bytes"])
-            index[fname] = args.prompt
+            index[fname] = prompt
 
     output = {
         "config": {
             "url": url,
             "model": args.model,
-            "prompt": args.prompt,
+            "prompts": prompts,
             "warmup": args.warmup,
             "requests": args.requests,
             "size": args.size,
