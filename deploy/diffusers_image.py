@@ -12,12 +12,17 @@ from diffusers import DiffusionPipeline
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 
-def load_pipeline(model: str, device_ids: list[int], offload: str) -> DiffusionPipeline:
+def load_pipeline(model: str, device_ids: list[int], offload: str, fp8: bool = False) -> DiffusionPipeline:
     kwargs = {"torch_dtype": torch.bfloat16}
     if offload == "none" and len(device_ids) > 1:
         kwargs["device_map"] = "balanced"
 
     pipe = DiffusionPipeline.from_pretrained(model, **kwargs)
+
+    if fp8 and hasattr(pipe, "transformer"):
+        pipe.transformer.enable_layerwise_casting(
+            storage_dtype=torch.float8_e4m3fn, compute_dtype=torch.bfloat16
+        )
 
     if "device_map" not in kwargs:
         if offload == "sequential":
@@ -82,11 +87,12 @@ def main():
     parser.add_argument("--devices", default="0", help="CUDA device IDs (comma-separated)")
     parser.add_argument("--offload", choices=["model", "sequential", "none"], default="model",
                         help="CPU offload strategy (default: model)")
+    parser.add_argument("--fp8", action="store_true", help="Enable FP8 layerwise casting on transformer")
     args = parser.parse_args()
 
     device_ids = [int(d) for d in args.devices.split(",")]
-    print(f"Loading {args.model} on devices {device_ids}, offload={args.offload}")
-    pipe = load_pipeline(args.model, device_ids, args.offload)
+    print(f"Loading {args.model} on devices {device_ids}, offload={args.offload}, fp8={args.fp8}")
+    pipe = load_pipeline(args.model, device_ids, args.offload, fp8=args.fp8)
     Handler.pipe = pipe
 
     server = HTTPServer((args.host, args.port), Handler)
