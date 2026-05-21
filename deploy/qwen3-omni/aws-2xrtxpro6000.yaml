@@ -1,0 +1,65 @@
+# Qwen3-Omni on 2x RTX PRO Server 6000 (96 GiB each).
+# Thinker on GPU 0, talker + code2wav on GPU 1.
+async_chunk: true
+
+connectors:
+  connector_of_shared_memory:
+    name: SharedMemoryConnector
+    extra:
+      codec_chunk_frames: 25
+      codec_left_context_frames: 25
+
+stages:
+  - stage_id: 0
+    max_model_len: 4096
+    max_num_batched_tokens: 4096
+    max_num_seqs: 128
+    gpu_memory_utilization: 0.9
+    trust_remote_code: true
+    enable_prefix_caching: true
+    devices: "0"
+    default_sampling_params:
+      temperature: 0.4
+      top_p: 0.9
+      top_k: 1
+      max_tokens: 2048
+      seed: 42
+      repetition_penalty: 1.05
+
+  - stage_id: 1
+    num_replicas: 2
+    max_model_len: 4096
+    max_num_batched_tokens: 4096
+    max_num_seqs: 4
+    gpu_memory_utilization: 0.6
+    trust_remote_code: true
+    enable_prefix_caching: false
+    devices: "1"
+    input_connectors:
+      from_stage_0: connector_of_shared_memory
+    default_sampling_params:
+      temperature: 0.9
+      top_k: 50
+      max_tokens: 4096
+      seed: 42
+      repetition_penalty: 1.05
+
+  - stage_id: 2
+    max_model_len: 4096
+    max_num_batched_tokens: 4096
+    max_num_seqs: 4
+    gpu_memory_utilization: 0.1
+    enforce_eager: true
+    trust_remote_code: true
+    enable_prefix_caching: false
+    async_scheduling: false
+    devices: "1"
+    input_connectors:
+      from_stage_1: connector_of_shared_memory
+    default_sampling_params:
+      temperature: 0.0
+      top_p: 1.0
+      top_k: -1
+      max_tokens: 4096
+      seed: 42
+      repetition_penalty: 1.1
