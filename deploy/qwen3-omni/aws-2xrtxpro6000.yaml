@@ -27,7 +27,6 @@ stages:
       repetition_penalty: 1.05
 
   - stage_id: 1
-    num_replicas: 2
     max_model_len: 4096
     max_num_batched_tokens: 4096
     max_num_seqs: 4
