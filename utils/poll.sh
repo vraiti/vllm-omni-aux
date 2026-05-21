@@ -20,7 +20,7 @@ while true; do
     exit 1
   fi
 
-  status=$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "$URL" 2>/dev/null || echo 'NOCONN')
+  status=$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "${URL%/}/health" 2>/dev/null || echo 'NOCONN')
 
   if [ "$status" = "200" ]; then
     echo "Server ready at $URL"
