@@ -18,7 +18,7 @@ while true; do
     python3 "$BENCHMARK" \
         --url "$URL" \
         --samples "$SAMPLES" \
-        --output /dev/null \
+        --output /tmp/loop-benchmark-latest.json \
     || echo "iteration $ITER failed"
     sleep "$PAUSE"
 done
