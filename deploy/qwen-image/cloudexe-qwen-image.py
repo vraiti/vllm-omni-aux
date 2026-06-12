@@ -5,7 +5,10 @@ import os
 import subprocess
 import sys
 
-VENV = os.environ.get("VLLM_VENV", "/root/venv312")
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+from _detect_venv import detect_venv
+
+VENV = detect_venv()
 VENV_BIN = os.path.join(VENV, "bin")
 
 os.environ["VIRTUAL_ENV"] = VENV
