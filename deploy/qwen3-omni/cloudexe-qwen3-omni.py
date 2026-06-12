@@ -21,6 +21,7 @@ result = subprocess.run(
         "serve", "Qwen/Qwen3-Omni-30B-A3B-Instruct",
         "--omni", "--port", "8000",
         "--deploy-config", DEPLOY_CONFIG,
+        "--log-stats",
         "--init-timeout", "1800",
         "--stage-init-timeout", "1800",
     ],
