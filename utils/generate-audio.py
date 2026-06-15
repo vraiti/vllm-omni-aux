@@ -17,6 +17,7 @@ def main():
     parser.add_argument("--model", default="Qwen/Qwen3-Omni-30B-A3B-Instruct")
     parser.add_argument("--stream", action="store_true")
     parser.add_argument("--no-stream", dest="stream", action="store_false")
+    parser.add_argument("--save-json", help="Save raw JSON response to file")
     parser.set_defaults(stream=True)
     args = parser.parse_args()
 
@@ -50,14 +51,15 @@ def main():
     req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
 
     if args.stream:
-        _handle_streaming(req, args.output)
+        _handle_streaming(req, args.output, args.save_json)
     else:
-        _handle_non_streaming(req, args.output)
+        _handle_non_streaming(req, args.output, args.save_json)
 
 
-def _handle_streaming(req, output_path):
+def _handle_streaming(req, output_path, save_json_path):
     text_parts = []
     audio_parts = []
+    chunks = []
 
     with urllib.request.urlopen(req, timeout=300) as resp:
         for raw_line in resp:
@@ -65,6 +67,7 @@ def _handle_streaming(req, output_path):
             if not line.startswith("data: ") or line == "data: [DONE]":
                 continue
             chunk = json.loads(line[6:])
+            chunks.append(chunk)
             modality = chunk.get("modality")
             for choice in chunk.get("choices", []):
                 content = choice.get("delta", {}).get("content")
@@ -75,6 +78,11 @@ def _handle_streaming(req, output_path):
                     print(content, end="", flush=True, file=sys.stderr)
                 elif modality == "audio":
                     audio_parts.append(content)
+
+    if save_json_path:
+        with open(save_json_path, "w") as f:
+            json.dump(chunks, f, indent=2, ensure_ascii=False)
+        print(f"JSON saved to {save_json_path}", file=sys.stderr)
 
     if text_parts:
         print(file=sys.stderr)
@@ -89,9 +97,14 @@ def _handle_streaming(req, output_path):
         print("No audio in response", file=sys.stderr)
 
 
-def _handle_non_streaming(req, output_path):
+def _handle_non_streaming(req, output_path, save_json_path):
     with urllib.request.urlopen(req, timeout=300) as resp:
         body = json.loads(resp.read())
+
+    if save_json_path:
+        with open(save_json_path, "w") as f:
+            json.dump(body, f, indent=2, ensure_ascii=False)
+        print(f"JSON saved to {save_json_path}", file=sys.stderr)
 
     msg = body["choices"][0]["message"]
     print(json.dumps(msg, indent=2, ensure_ascii=False), file=sys.stderr)
