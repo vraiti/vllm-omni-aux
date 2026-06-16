@@ -12,8 +12,8 @@ connectors:
 stages:
   - stage_id: 0
     quantization: fp8
-    max_model_len: 4096
-    max_num_batched_tokens: 4096
+    max_model_len: 16384
+    max_num_batched_tokens: 16384
     max_num_seqs: 32
     gpu_memory_utilization: 0.78
     trust_remote_code: true
@@ -29,8 +29,8 @@ stages:
 
   - stage_id: 1
     quantization: fp8
-    max_model_len: 4096
-    max_num_batched_tokens: 4096
+    max_model_len: 16384
+    max_num_batched_tokens: 16384
     max_num_seqs: 32
     gpu_memory_utilization: 0.13
     trust_remote_code: true
@@ -46,8 +46,8 @@ stages:
       repetition_penalty: 1.05
 
   - stage_id: 2
-    max_model_len: 4096
-    max_num_batched_tokens: 4096
+    max_model_len: 16384
+    max_num_batched_tokens: 16384
     max_num_seqs: 8
     gpu_memory_utilization: 0.05
     enforce_eager: true
