@@ -45,6 +45,7 @@ result = subprocess.run(
         "--init-timeout", "1800",
         "--stage-init-timeout", "1800",
         "--otlp-traces-endpoint", "http://localhost:4317",
+        "--async-chunk",
     ],
     env=os.environ,
     stdout=sys.stdout,

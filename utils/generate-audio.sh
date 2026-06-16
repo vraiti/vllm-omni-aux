@@ -7,12 +7,13 @@ MODEL="${VLLM_MODEL:-Qwen/Qwen3-Omni-30B-A3B-Instruct}"
 PROMPT="${1:-Hello, how are you today?}"
 OUTPUT="${2:-output.wav}"
 
-response=$(curl -sf "http://${HOST}:${PORT}/v1/chat/completions" \
+curl -s "http://${HOST}:${PORT}/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d "$(cat <<EOF
 {
   "model": "$MODEL",
   "modalities": ["text", "audio"],
+  "stream": true,
   "messages": [
     {
       "role": "system",
@@ -25,21 +26,33 @@ response=$(curl -sf "http://${HOST}:${PORT}/v1/chat/completions" \
   ]
 }
 EOF
-)")
+)" | python3 -c "
+import sys, json, base64
 
-text=$(echo "$response" | python3 -c "
-import sys, json
-r = json.load(sys.stdin)
-c = r['choices'][0]['message']
-if c.get('content'):
-    print(c['content'])
-if c.get('audio') and c['audio'].get('data'):
-    import base64
-    audio = base64.b64decode(c['audio']['data'])
-    outpath = '$OUTPUT'
-    with open(outpath, 'wb') as f:
-        f.write(audio)
-    print(f'Audio saved to {outpath} ({len(audio)} bytes)', file=sys.stderr)
-")
+text_parts = []
+audio_parts = []
+for line in sys.stdin:
+    line = line.strip()
+    if not line.startswith('data: ') or line == 'data: [DONE]':
+        continue
+    chunk = json.loads(line[6:])
+    modality = chunk.get('modality')
+    content = None
+    for choice in chunk.get('choices', []):
+        delta = choice.get('delta', {})
+        content = delta.get('content')
+    if content is None:
+        continue
+    if modality == 'text':
+        text_parts.append(content)
+    elif modality == 'audio':
+        audio_parts.append(content)
 
-[ -n "$text" ] && echo "$text"
+if text_parts:
+    print(''.join(text_parts))
+if audio_parts:
+    audio_data = base64.b64decode(''.join(audio_parts))
+    with open('$OUTPUT', 'wb') as f:
+        f.write(audio_data)
+    print(f'Audio saved to $OUTPUT ({len(audio_data)} bytes)', file=sys.stderr)
+"
