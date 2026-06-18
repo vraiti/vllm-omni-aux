@@ -6,12 +6,14 @@ import subprocess
 import sys
 import time
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from _detect_venv import detect_venv
+VENV = os.environ.get("VIRTUAL_ENV")
+if not VENV:
+    print("ERROR: VIRTUAL_ENV not set. Use cloudexe --pythonpath $VIRTUAL_ENV", file=sys.stderr)
+    sys.exit(1)
 
-VENV = detect_venv()
+print(f"[Launcher] Using venv: {VENV}")
 VENV_BIN = os.path.join(VENV, "bin")
-DEPLOY_CONFIG = "/root/vllm-omni-aux/deploy/qwen3-omni/cloudexe-1xh100.yaml"
+DEPLOY_CONFIG = "/root/projects/tracing/vllm-omni-aux/deploy/qwen3-omni/cloudexe-1xh100.yaml"
 JAEGER_BINARY = "/root/jaeger/jaeger-2.19.0-linux-amd64/jaeger"
 JAEGER_CONFIG = "/root/jaeger/jaeger-config.yaml"
 
