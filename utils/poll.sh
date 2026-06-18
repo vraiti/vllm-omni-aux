@@ -14,6 +14,9 @@ SERVER_PID="$1"
 URL="$2"
 INTERVAL="${3:-10}"
 
+# Get process start time in seconds since epoch
+START_TIME=$(ps -p "$SERVER_PID" -o lstart= 2>/dev/null | xargs -I {} date -d "{}" +%s 2>/dev/null || echo "")
+
 while true; do
   if ! kill -0 "$SERVER_PID" 2>/dev/null; then
     echo "Process $SERVER_PID is dead"
@@ -24,6 +27,13 @@ while true; do
 
   if [ "$status" = "200" ]; then
     echo "Server ready at $URL"
+    if [ -n "$START_TIME" ]; then
+      END_TIME=$(date +%s)
+      ELAPSED=$((END_TIME - START_TIME))
+      MINUTES=$((ELAPSED / 60))
+      SECONDS=$((ELAPSED % 60))
+      echo "Startup time: ${MINUTES}m ${SECONDS}s (from process start)"
+    fi
     exit 0
   fi
 
