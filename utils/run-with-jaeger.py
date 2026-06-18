@@ -41,10 +41,16 @@ def main():
     time.sleep(5)
     print("[Launcher] Jaeger started, launching command...", flush=True)
 
+    # Set OTLP endpoint for vLLM tracing
+    env = os.environ.copy()
+    if "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT" not in env:
+        env["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"] = "http://localhost:4317"
+        print(f"[Launcher] Set OTEL_EXPORTER_OTLP_TRACES_ENDPOINT={env['OTEL_EXPORTER_OTLP_TRACES_ENDPOINT']}", flush=True)
+
     # Launch command with all arguments passed to this script
     result = subprocess.run(
         sys.argv[1:],
-        env=os.environ,
+        env=env,
         stdout=sys.stdout,
         stderr=sys.stdout,
     )
