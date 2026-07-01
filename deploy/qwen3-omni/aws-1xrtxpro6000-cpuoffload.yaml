@@ -1,6 +1,7 @@
-# Qwen3-Omni with CPU weight offloading via vLLM's UVA backend.
+# Qwen3-Omni with CPU weight offloading via vLLM's prefetch backend.
 # gpu_memory_utilization is set low to force weight offloading;
-# cpu_offload_gb covers the deficit.
+# offload_group_size groups layers and offloads the last N per group
+# to CPU, prefetching the next layer async on a separate CUDA stream.
 async_chunk: true
 
 connectors:
@@ -16,7 +17,8 @@ stages:
     max_num_batched_tokens: 4096
     max_num_seqs: 128
     gpu_memory_utilization: 0.4
-    cpu_offload_gb: 30
+    offload_group_size: 4
+    offload_num_in_group: 3
     trust_remote_code: true
     enable_prefix_caching: true
     devices: "0"
@@ -33,7 +35,8 @@ stages:
     max_num_batched_tokens: 4096
     max_num_seqs: 4
     gpu_memory_utilization: 0.3
-    cpu_offload_gb: 30
+    offload_group_size: 4
+    offload_num_in_group: 3
     trust_remote_code: true
     enable_prefix_caching: false
     devices: "0"
