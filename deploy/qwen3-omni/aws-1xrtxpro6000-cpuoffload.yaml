@@ -1,8 +1,6 @@
-# Qwen3-Omni on 1x RTX PRO 6000 (96 GiB) with CPU weight offloading.
-# Based on aws-1xrtxpro6000.yaml with gpu_memory_utilization lowered on
-# stages 0 and 1 to force weight offloading via vLLM's UVA backend.
-# cpu_offload_gb covers the deficit so model weights that do not fit in
-# the reduced GPU budget are kept in pinned CPU memory.
+# Qwen3-Omni with CPU weight offloading via vLLM's UVA backend.
+# gpu_memory_utilization is set low to force weight offloading;
+# cpu_offload_gb covers the deficit.
 async_chunk: true
 
 connectors:
@@ -18,7 +16,7 @@ stages:
     max_num_batched_tokens: 4096
     max_num_seqs: 128
     gpu_memory_utilization: 0.4
-    cpu_offload_gb: 10
+    cpu_offload_gb: 30
     trust_remote_code: true
     enable_prefix_caching: true
     devices: "0"
@@ -35,7 +33,7 @@ stages:
     max_num_batched_tokens: 4096
     max_num_seqs: 4
     gpu_memory_utilization: 0.3
-    cpu_offload_gb: 10
+    cpu_offload_gb: 30
     trust_remote_code: true
     enable_prefix_caching: false
     devices: "0"
