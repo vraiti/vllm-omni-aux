@@ -37,6 +37,15 @@ while true; do
     exit 0
   fi
 
-  echo "$(date +%H:%M:%S) pid=$SERVER_PID status=$status"
+  if [ -n "$START_TIME" ]; then
+    NOW=$(date +%s)
+    ELAPSED=$((NOW - START_TIME))
+    MINS=$((ELAPSED / 60))
+    SECS=$((ELAPSED % 60))
+    UPTIME=$(printf '%dm%02ds' "$MINS" "$SECS")
+  else
+    UPTIME="?"
+  fi
+  echo "$(date +%H:%M:%S) +${UPTIME} pid=$SERVER_PID status=$status"
   sleep "$INTERVAL"
 done
