@@ -1,18 +1,25 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Usage: ./poll.sh <pid> <url> [interval_seconds]
+# Usage: ./poll.sh <pid> <host:port> [interval_seconds]
 # Polls a vLLM-Omni server for readiness.
 # Exits 0 when the server responds 200, or 1 if the process dies first.
 
 if [ $# -lt 2 ]; then
-  echo "Usage: $0 <pid> <url> [interval_seconds]" >&2
+  echo "Usage: $0 <pid> <host:port> [interval_seconds]" >&2
   exit 2
 fi
 
 SERVER_PID="$1"
-URL="$2"
+ADDR="$2"
 INTERVAL="${3:-10}"
+
+if [[ "$ADDR" =~ ^https?:// ]]; then
+  echo "Error: expected host:port (e.g. localhost:8000), not a URL" >&2
+  exit 2
+fi
+
+URL="http://${ADDR}"
 
 # Get process start time in seconds since epoch
 START_TIME=$(ps -p "$SERVER_PID" -o lstart= 2>/dev/null | xargs -I {} date -d "{}" +%s 2>/dev/null || echo "")
@@ -46,6 +53,6 @@ while true; do
   else
     UPTIME="?"
   fi
-  echo "$(date +%H:%M:%S) +${UPTIME} pid=$SERVER_PID status=$status"
+  echo "$(TZ='America/New_York' date +%H:%M:%S) +${UPTIME} pid=$SERVER_PID status=$status"
   sleep "$INTERVAL"
 done
