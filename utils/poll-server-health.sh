@@ -15,11 +15,10 @@ ADDR="$2"
 INTERVAL="${3:-10}"
 
 if [[ "$ADDR" =~ ^https?:// ]]; then
-  echo "Error: expected host:port (e.g. localhost:8000), not a URL" >&2
-  exit 2
+  URL="$ADDR"
+else
+  URL="http://${ADDR}"
 fi
-
-URL="http://${ADDR}"
 
 # Get process start time in seconds since epoch
 START_TIME=$(ps -p "$SERVER_PID" -o lstart= 2>/dev/null | xargs -I {} date -d "{}" +%s 2>/dev/null || echo "")
@@ -31,6 +30,11 @@ while true; do
   fi
 
   status=$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "${URL%/}/health" 2>/dev/null || echo 'NOCONN')
+
+  if [[ "$status" =~ ^[45] ]]; then
+    echo "Server returned HTTP $status"
+    exit 1
+  fi
 
   if [ "$status" = "200" ]; then
     echo "Server ready at $URL"
