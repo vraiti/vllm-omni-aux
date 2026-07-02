@@ -10,7 +10,6 @@ connectors:
 
 stages:
   - stage_id: 0
-    quantization: fp8
     max_model_len: 16384
     max_num_batched_tokens: 16384
     max_num_seqs: 32
@@ -27,7 +26,6 @@ stages:
       repetition_penalty: 1.05
 
   - stage_id: 1
-    quantization: fp8
     max_model_len: 16384
     max_num_batched_tokens: 16384
     max_num_seqs: 32
