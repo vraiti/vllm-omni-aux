@@ -18,11 +18,6 @@ EOF
     exit 1
 }
 
-if [[ ! "$PWD" =~ ^$HOME/omni/[^/]+$ ]]; then
-    echo "ERROR: must be run from a direct subdirectory of ~/omni/" >&2
-    exit 1
-fi
-
 INSTANCE_ALIAS="aws"
 SSH_CONFIG="$HOME/.ssh/config.d/$INSTANCE_ALIAS"
 SSH_ALIAS="$INSTANCE_ALIAS"
@@ -79,6 +74,16 @@ setup_sshfs() {
 cmd_create() {
     local instance_type="${1:?Usage: $0 create <instance-type> [alias]}"
     set_alias "${2:-}"
+
+    local project_dir="$PWD"
+    while [[ "$project_dir" != "$HOME/omni" && "$project_dir" != "/" ]]; do
+        if [[ "$(dirname "$project_dir")" == "$HOME/omni" ]]; then
+            break
+        fi
+        project_dir="$(dirname "$project_dir")"
+    done
+    pushd "$project_dir" > /dev/null
+    trap 'popd > /dev/null' EXIT
 
     if [[ -f "$SSH_CONFIG" ]]; then
         echo "ERROR: alias '$INSTANCE_ALIAS' already exists" >&2
