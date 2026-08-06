@@ -84,8 +84,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--listen", type=int, default=9090)
     parser.add_argument("--upstream", type=int, default=8000)
-    parser.add_argument("--inbound-log", default="/tmp/proxy_inbound.jsonl")
-    parser.add_argument("--outbound-log", default="/tmp/proxy_outbound.jsonl")
+    parser.add_argument("--inbound-log", default="/tmp/logs/proxy_inbound.jsonl")
+    parser.add_argument("--outbound-log", default="/tmp/logs/proxy_outbound.jsonl")
     args = parser.parse_args()
 
     app = web.Application()

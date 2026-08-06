@@ -7,6 +7,9 @@ VLLM_OMNI_ORIGIN="https://github.com/vllm-project/vllm-omni.git"
 VLLM_OMNI_FORK="https://github.com/vraiti/vllm-omni.git"
 VLLM_OMNI_AUX_ORIGIN="https://github.com/vraiti/vllm-omni-aux.git"
 
+sudo mkdir -p /app
+sudo chown $USER:$USER /app
+
 echo "Cloning vllm-omni..."
 git clone "$VLLM_OMNI_ORIGIN" /app/vllm-omni
 cd /app/vllm-omni

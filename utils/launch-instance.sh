@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-INSTANCE_TYPE="${1:?Usage: $0 <instance-type> [name-suffix]}"
-NAME_SUFFIX="${2:-$INSTANCE_TYPE}"
+INSTANCE_TYPE="${1:?Usage: $0 <instance-type> [alias]}"
+SSH_ALIAS="${2:-aws}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 KEY_NAME="vraiti-ed25519"
 SECURITY_GROUP="sg-04371316571a0bf71"
 VOLUME_SIZE=200
-TAG_NAME="vraiti-$(date +%Y%m%d)-vllm_omni-${NAME_SUFFIX}"
+TAG_NAME="vraiti-$(date +%Y%m%d)-vllm_omni-${SSH_ALIAS}"
 
 echo "Looking up AMI..."
 AMI_ID=$(aws ec2 describe-images \
@@ -44,19 +44,18 @@ PUBLIC_IP=$(aws ec2 describe-instances \
     --output text)
 
 echo "Public IP: $PUBLIC_IP"
-echo "Polling SSH readiness..."
-bash "$SCRIPT_DIR/poll-ssh.sh" "$SSH_ALIAS"
-
-SSH_ALIAS="aws"
 mkdir -p ~/.ssh/config.d
 ssh-keygen -R "$PUBLIC_IP" 2>/dev/null || true
-cat > ~/.ssh/config.d/aws <<EOF
+cat > ~/.ssh/config.d/"$SSH_ALIAS" <<EOF
+# state: running
 Host ${SSH_ALIAS}
     HostName ${PUBLIC_IP}
     User ec2-user
     IdentityFile ~/.ssh/vraiti-ed25519.pem
     StrictHostKeyChecking accept-new
 EOF
+
+bash "$SCRIPT_DIR/poll-ssh.sh" "$SSH_ALIAS"
 
 BRANCH=$(git -C "$SCRIPT_DIR/../../vllm-omni" branch --show-current)
 if [[ -z "$BRANCH" ]]; then
