@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 SSH_CONFIG="$HOME/.ssh/config.d/aws"
+SSH_ALIAS="aws"
 
 usage() {
     cat <<EOF
@@ -17,17 +18,7 @@ EOF
     exit 1
 }
 
-get_ssh_alias() {
-    if [[ ! -f "$SSH_CONFIG" ]]; then
-        echo "ERROR: no SSH config at $SSH_CONFIG" >&2
-        exit 1
-    fi
-    grep '^Host ' "$SSH_CONFIG" | head -1 | awk '{print $2}'
-}
-
 get_instance_id() {
-    local alias
-    alias=$(get_ssh_alias)
     local ip
     ip=$(grep 'HostName' "$SSH_CONFIG" | head -1 | awk '{print $2}')
 
@@ -46,7 +37,7 @@ get_instance_id() {
     fi
 
     if [[ "$id" == "None" || -z "$id" ]]; then
-        echo "ERROR: could not find instance for alias $alias" >&2
+        echo "ERROR: could not find instance" >&2
         exit 1
     fi
     echo "$id"
@@ -80,36 +71,20 @@ cmd_start() {
         --output text)
     echo "Public IP: $new_ip"
 
-    local alias
-    alias=$(get_ssh_alias)
     ssh-keygen -R "$new_ip" 2>/dev/null || true
     sed -i "s/HostName .*/HostName $new_ip/" "$SSH_CONFIG"
 
-    echo "Polling SSH readiness..."
-    for ((i = 1; i <= 60; i++)); do
-        if ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o BatchMode=yes "$new_ip" true 2>/dev/null; then
-            echo "SSH is ready."
-            break
-        fi
-        echo "Attempt $i/60 — SSH not ready, retrying in 5s..."
-        sleep 5
-        if ((i == 60)); then
-            echo "ERROR: SSH did not become ready after 300s" >&2
-            exit 1
-        fi
-    done
+    bash "$SCRIPT_DIR/poll-ssh.sh" "$SSH_ALIAS"
 
     echo ""
     echo "Instance: $id"
     echo "IP:       $new_ip"
-    echo "SSH:      ssh $alias"
+    echo "SSH:      ssh $SSH_ALIAS"
 }
 
 cmd_delete() {
     local id
     id=$(get_instance_id)
-    local alias
-    alias=$(get_ssh_alias)
 
     echo "Terminating $id..."
     aws ec2 terminate-instances --instance-ids "$id" --output text
@@ -119,7 +94,7 @@ cmd_delete() {
         echo "Removed $SSH_CONFIG"
     fi
 
-    echo "Instance $id terminated, SSH alias '$alias' removed."
+    echo "Instance $id terminated, SSH alias '$SSH_ALIAS' removed."
 }
 
 COMMAND="${1:-}"

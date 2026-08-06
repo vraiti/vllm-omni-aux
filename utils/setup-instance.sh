@@ -30,19 +30,22 @@ fi
 echo "Installing vllm==$VLLM_VERSION..."
 uv pip install "vllm==$VLLM_VERSION"
 
-FLASHINFER_VERSION=$(uv pip show flashinfer | grep -oP '^Version: \K.*')
+FLASHINFER_VERSION=$(uv pip show flashinfer-python | grep -oP '^Version: \K.*')
 if [[ -z "$FLASHINFER_VERSION" ]]; then
     echo "ERROR: flashinfer not found after vllm install" >&2
     exit 1
 fi
 
-echo "Installing flashinfer-jit-cache==$FLASHINFER_VERSION..."
 CUDA_VERSION=$(nvcc --version | grep -oP 'release \K[0-9]+\.[0-9]+')
 CUDA_TAG=$(echo "$CUDA_VERSION" | tr -d '.')
-uv pip install "flashinfer-jit-cache==$FLASHINFER_VERSION" \
-    --index-url "https://flashinfer.ai/whl/cu${CUDA_TAG}"
+echo "Installing flashinfer-jit-cache==$FLASHINFER_VERSION (cu$CUDA_TAG)..."
+if ! uv pip install "flashinfer-jit-cache==$FLASHINFER_VERSION" \
+    --index-url "https://flashinfer.ai/whl/cu${CUDA_TAG}" 2>/dev/null; then
+    echo "flashinfer-jit-cache not available, skipping (may be bundled in flashinfer-python)."
+fi
 
 echo "Installing vllm-omni in dev mode..."
+uv pip install setuptools-scm
 uv pip install -e . --no-build-isolation
 
 echo "Done."

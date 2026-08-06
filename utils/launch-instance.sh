@@ -45,9 +45,9 @@ PUBLIC_IP=$(aws ec2 describe-instances \
 
 echo "Public IP: $PUBLIC_IP"
 echo "Polling SSH readiness..."
-bash "$SCRIPT_DIR/poll-ssh.sh" "$PUBLIC_IP"
+bash "$SCRIPT_DIR/poll-ssh.sh" "$SSH_ALIAS"
 
-SSH_ALIAS="aws-${INSTANCE_TYPE}"
+SSH_ALIAS="aws"
 mkdir -p ~/.ssh/config.d
 ssh-keygen -R "$PUBLIC_IP" 2>/dev/null || true
 cat > ~/.ssh/config.d/aws <<EOF
