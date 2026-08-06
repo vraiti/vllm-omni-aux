@@ -93,11 +93,15 @@ def main():
     cmd = ["vllm", "serve", "--omni", model, "--deploy", deploy_path]
     log_file = open(LOG_PATH, "wb")
 
+    env = os.environ.copy()
+    env["VLLM_OMNI_DTRACE"] = "1"
+
     proc = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         start_new_session=True,
+        env=env,
     )
 
     tee_thread = threading.Thread(
