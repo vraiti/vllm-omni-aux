@@ -95,23 +95,21 @@ def main():
 
     proc = subprocess.Popen(
         cmd,
-        stdout=subprocess.PIPE,
+        stdout=log_file,
         stderr=subprocess.STDOUT,
         start_new_session=True,
     )
 
-    tee_thread = threading.Thread(
-        target=tee_stream,
-        args=(proc.stdout, log_file, sys.stdout),
-        daemon=True,
+    tail = subprocess.Popen(
+        ["tail", "-f", LOG_PATH],
+        start_new_session=True,
     )
-    tee_thread.start()
 
     while True:
         time.sleep(POLL_INTERVAL)
 
         if proc.poll() is not None:
-            tee_thread.join(timeout=5)
+            tail.terminate()
             log_file.close()
             print(f"vllm process died with exit code {proc.returncode}", file=sys.stderr)
             return 1
@@ -119,6 +117,7 @@ def main():
         try:
             resp = urllib.request.urlopen(HEALTH_URL, timeout=5)
             if resp.status == 200:
+                tail.terminate()
                 print("Health check passed. Server running as PID %d." % proc.pid)
                 return 0
         except (urllib.error.URLError, OSError):
