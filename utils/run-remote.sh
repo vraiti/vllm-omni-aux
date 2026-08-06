@@ -22,22 +22,20 @@ trap 'popd > /dev/null' EXIT
 AUX_DIR="$PROJECT_DIR/vllm-omni-aux"
 OMNI_DIR="$PROJECT_DIR/vllm-omni"
 
-check_clean() {
-    local repo_dir="$1" name="$2"
+auto_commit_and_push() {
+    local repo_dir="$1"
     if [[ -n "$(git -C "$repo_dir" status --porcelain)" ]]; then
-        echo "ERROR: $name has uncommitted changes" >&2
-        exit 1
+        git -C "$repo_dir" add -A
+        git -C "$repo_dir" commit -s -m "auto-commit $(date '+%H:%M:%S %m/%d/%Y')"
     fi
+    git -C "$repo_dir" push
 }
 
 BRANCH=$(git -C "$OMNI_DIR" branch --show-current)
 AUX_BRANCH=$(git -C "$AUX_DIR" branch --show-current)
 
-check_clean "$OMNI_DIR" "vllm-omni"
-check_clean "$AUX_DIR" "vllm-omni-aux"
-
-git -C "$OMNI_DIR" push
-git -C "$AUX_DIR" push
+auto_commit_and_push "$OMNI_DIR"
+auto_commit_and_push "$AUX_DIR"
 
 OMNI_REMOTE=$(git -C "$OMNI_DIR" config "branch.$BRANCH.remote")
 AUX_REMOTE=$(git -C "$AUX_DIR" config "branch.$AUX_BRANCH.remote")
