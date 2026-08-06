@@ -2,7 +2,9 @@
 import argparse
 import asyncio
 import json
+import os
 import time
+from datetime import datetime, timezone
 
 import aiohttp
 from aiohttp import web, WSMsgType
@@ -13,8 +15,13 @@ async def proxy_ws(request: web.Request) -> web.WebSocketResponse:
     await client_ws.prepare(request)
 
     upstream_url = request.app["upstream_url"] + request.path_qs
-    inbound_log = open(request.app["inbound_log"], "a")
-    outbound_log = open(request.app["outbound_log"], "a")
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    log_dir = request.app["log_dir"]
+    inbound_path = os.path.join(log_dir, f"ws_{ts}_inbound.jsonl")
+    outbound_path = os.path.join(log_dir, f"ws_{ts}_outbound.jsonl")
+    print(f"WS connect: {inbound_path}")
+    inbound_log = open(inbound_path, "w")
+    outbound_log = open(outbound_path, "w")
 
     session = aiohttp.ClientSession()
     try:
@@ -84,19 +91,18 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--listen", type=int, default=9090)
     parser.add_argument("--upstream", type=int, default=8000)
-    parser.add_argument("--inbound-log", default="/tmp/logs/proxy_inbound.jsonl")
-    parser.add_argument("--outbound-log", default="/tmp/logs/proxy_outbound.jsonl")
+    parser.add_argument("--log-dir", default="/tmp/logs")
     args = parser.parse_args()
+
+    os.makedirs(args.log_dir, exist_ok=True)
 
     app = web.Application()
     app["upstream_url"] = f"http://127.0.0.1:{args.upstream}"
-    app["inbound_log"] = args.inbound_log
-    app["outbound_log"] = args.outbound_log
+    app["log_dir"] = args.log_dir
     app.router.add_route("*", "/{path:.*}", handler)
 
     print(f"Proxying 0.0.0.0:{args.listen} -> 127.0.0.1:{args.upstream}")
-    print(f"  inbound log:  {args.inbound_log}")
-    print(f"  outbound log: {args.outbound_log}")
+    print(f"  log dir: {args.log_dir}")
     web.run_app(app, host="0.0.0.0", port=args.listen, print=None)
 
 
