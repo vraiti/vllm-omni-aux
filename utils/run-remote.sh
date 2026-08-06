@@ -47,9 +47,13 @@ ssh "$SSH_ALIAS" "cd /app/vllm-omni-aux && git fetch --all && git checkout $AUX_
 
 REMOTE_CMD="$1"
 shift
-LOCAL_MATCH=$(find "$AUX_DIR" -name "$REMOTE_CMD" -type f | head -1)
-if [[ -n "$LOCAL_MATCH" ]]; then
-    REMOTE_CMD="/app/vllm-omni-aux/${LOCAL_MATCH#"$AUX_DIR"/}"
+mapfile -t MATCHES < <(cd "$AUX_DIR" && find . -name "$REMOTE_CMD" -type f)
+if [[ ${#MATCHES[@]} -eq 1 ]]; then
+    REMOTE_CMD="/app/vllm-omni-aux/${MATCHES[0]#./}"
+elif [[ ${#MATCHES[@]} -gt 1 ]]; then
+    echo "ERROR: ambiguous command '$REMOTE_CMD', matches:" >&2
+    printf "  %s\n" "${MATCHES[@]}" >&2
+    exit 1
 fi
 
 ssh -tt "$SSH_ALIAS" "$REMOTE_CMD" "$@"
