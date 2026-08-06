@@ -57,6 +57,7 @@ def main():
         cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
+        start_new_session=True,
     )
 
     tee_thread = threading.Thread(
@@ -78,11 +79,7 @@ def main():
         try:
             resp = urllib.request.urlopen(HEALTH_URL, timeout=5)
             if resp.status == 200:
-                print("Health check passed.")
-                proc.terminate()
-                proc.wait()
-                tee_thread.join(timeout=5)
-                log_file.close()
+                print("Health check passed. Server running as PID %d." % proc.pid)
                 return 0
         except (urllib.error.URLError, OSError):
             pass

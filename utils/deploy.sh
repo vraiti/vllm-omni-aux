@@ -69,6 +69,6 @@ echo "SSH target:           $SSH_ALIAS"
 ssh "$SSH_ALIAS" "cd /app/vllm-omni && git fetch --all && git checkout $BRANCH && git pull --ff-only"
 ssh "$SSH_ALIAS" "cd /app/vllm-omni-aux && git fetch --all && git checkout $AUX_BRANCH && git pull --ff-only"
 
-ssh "$SSH_ALIAS" HF_TOKEN="$HF_TOKEN" python3 /app/vllm-omni-aux/utils/deploy.py \
+ssh -tt "$SSH_ALIAS" HF_TOKEN="$HF_TOKEN" python3 /app/vllm-omni-aux/utils/deploy.py \
     --model "$MODEL" \
     --deploy "$REMOTE_DEPLOY"
