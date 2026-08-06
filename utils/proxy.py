@@ -3,6 +3,7 @@ import argparse
 import asyncio
 import json
 import os
+import signal
 import time
 from datetime import datetime, timezone
 
@@ -88,6 +89,8 @@ async def handler(request: web.Request) -> web.WebSocketResponse | web.Response:
 
 
 def main():
+    signal.signal(signal.SIGHUP, lambda *_: os._exit(0))
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--listen", type=int, default=9090)
     parser.add_argument("--upstream", type=int, default=8000)
