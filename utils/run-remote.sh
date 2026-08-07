@@ -1,13 +1,38 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $# -lt 2 ]]; then
-    echo "Usage: $0 <alias> <command> [args...]" >&2
+resolve_alias() {
+    local configs=( ~/.ssh/config.d/* )
+    local count=0
+    local single=""
+    for f in "${configs[@]}"; do
+        [[ -f "$f" ]] || continue
+        count=$((count + 1))
+        single=$(basename "$f")
+    done
+    if [[ $count -eq 1 ]]; then
+        echo "$single"
+        return 0
+    fi
+    return 1
+}
+
+if [[ $# -lt 1 ]]; then
+    echo "Usage: $0 [alias] <command> [args...]" >&2
     exit 1
 fi
 
-SSH_ALIAS="$1"
-shift
+# If the first arg matches a config, it's the alias; otherwise try to default
+if [[ -f "$HOME/.ssh/config.d/$1" ]]; then
+    SSH_ALIAS="$1"
+    shift
+elif SSH_ALIAS=$(resolve_alias); then
+    :
+else
+    echo "ERROR: multiple instances exist, specify an alias" >&2
+    ls ~/.ssh/config.d/ >&2
+    exit 1
+fi
 
 PROJECT_DIR="$PWD"
 while [[ "$PROJECT_DIR" != "$HOME/omni" && "$PROJECT_DIR" != "/" ]]; do
@@ -54,4 +79,5 @@ elif [[ ${#MATCHES[@]} -gt 1 ]]; then
     exit 1
 fi
 
-ssh -tt "$SSH_ALIAS" "$REMOTE_CMD" "$@"
+HF_TOKEN=$(cat ~/.secret/hf)
+ssh -tt "$SSH_ALIAS" HF_TOKEN="$HF_TOKEN" "$REMOTE_CMD" "$@"
