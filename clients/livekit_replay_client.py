@@ -100,7 +100,7 @@ async def _print_responses(ws, args, outbound_log):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("inbound_log", help="Path to proxy_inbound.jsonl")
+    parser.add_argument("inbound_log", help="Path to proxy_inbound.jsonl", default="/tmp/logs/proxy_inbound.jsonl")
     parser.add_argument("--host", default="localhost")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--model", default="Qwen/Qwen3-Omni-30B-A3B-Instruct")
@@ -114,7 +114,7 @@ def main():
                         help="Skip response.cancel messages")
     parser.add_argument("--skip-session-update", action="store_true",
                         help="Skip session.update messages")
-    parser.add_argument("--outbound-log", default="replay_outbound.jsonl",
+    parser.add_argument("--outbound-log", default="/tmp/logs/replay_outbound.jsonl",
                         help="Path to write server responses (overwritten)")
     parser.add_argument("--dump-responses", action="store_true",
                         help="Print full JSON of server responses")

@@ -63,7 +63,8 @@ set_state() {
 }
 
 setup_sshfs() {
-    local mount_point="/tmp/$INSTANCE_ALIAS"
+    mkdir -p /tmp/logs
+    local mount_point="/tmp/logs/$INSTANCE_ALIAS"
     fusermount -u "$mount_point" 2>/dev/null || true
     mkdir -p "$mount_point"
     ssh "$SSH_ALIAS" "mkdir -p /tmp/logs"
