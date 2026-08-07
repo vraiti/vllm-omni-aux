@@ -59,7 +59,19 @@ def resolve_model(key):
     return model
 
 
-def resolve_deploy_config(model_key, config_name):
+def gpu_count():
+    result = subprocess.run(
+        ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
+        capture_output=True, text=True,
+    )
+    return len([l for l in result.stdout.splitlines() if l.strip()])
+
+
+def resolve_deploy_config(model_key, config_name=None):
+    if config_name is None:
+        n = gpu_count()
+        config_name = f"{n}gpu.yaml"
+        print(f"Auto-detected {n} GPU(s), using {config_name}")
     path = os.path.join(DEPLOY_CONFIGS_DIR, model_key, config_name)
     if not os.path.isfile(path):
         config_dir = os.path.join(DEPLOY_CONFIGS_DIR, model_key)
@@ -76,7 +88,7 @@ def resolve_deploy_config(model_key, config_name):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("model_key")
-    parser.add_argument("deploy_config")
+    parser.add_argument("deploy_config", nargs="?", default=None)
     args = parser.parse_args()
 
     model = resolve_model(args.model_key)
