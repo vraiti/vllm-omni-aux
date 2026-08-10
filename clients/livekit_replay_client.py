@@ -110,6 +110,8 @@ def main():
     )
     parser.add_argument("--wait", type=float, default=10.0,
                         help="Seconds to wait for responses after last message")
+    parser.add_argument("--timeout", type=float, default=60.0,
+                        help="Total session timeout in seconds (0 = no limit)")
     parser.add_argument("--skip-cancel", action="store_true",
                         help="Skip response.cancel messages")
     parser.add_argument("--skip-session-update", action="store_true",
@@ -119,7 +121,17 @@ def main():
     parser.add_argument("--dump-responses", action="store_true",
                         help="Print full JSON of server responses")
     args = parser.parse_args()
-    sys.exit(asyncio.run(replay(args)))
+
+    async def run():
+        if args.timeout > 0:
+            try:
+                return await asyncio.wait_for(replay(args), timeout=args.timeout)
+            except asyncio.TimeoutError:
+                print(f"\nTimeout after {args.timeout}s", file=sys.stderr)
+                return 1
+        return await replay(args)
+
+    sys.exit(asyncio.run(run()))
 
 
 if __name__ == "__main__":
