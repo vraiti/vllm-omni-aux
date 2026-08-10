@@ -4,7 +4,6 @@ import os
 import signal
 import subprocess
 import sys
-import threading
 import time
 import urllib.request
 import urllib.error
@@ -40,14 +39,6 @@ def kill_gpu_processes():
         except ProcessLookupError:
             pass
 
-
-
-def tee_stream(stream, log_file, out):
-    for line in stream:
-        out.buffer.write(line)
-        out.buffer.flush()
-        log_file.write(line)
-        log_file.flush()
 
 
 def resolve_model(key):
@@ -102,35 +93,22 @@ def main():
     kill_gpu_processes()
 
     os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
-    cmd = ["vllm", "serve", "--omni", model, "--deploy", deploy_path]
-    log_file = open(LOG_PATH, "wb")
+    serve_cmd = f"vllm serve --omni {model} --deploy {deploy_path}"
+    cmd = ["bash", "-c", f"{serve_cmd} 2>&1 | tee {LOG_PATH}"]
 
-    proc = subprocess.Popen(
-        cmd,
-        stdout=log_file,
-        stderr=subprocess.STDOUT,
-        start_new_session=True,
-    )
-
-    tail = subprocess.Popen(
-        ["tail", "-f", LOG_PATH],
-        start_new_session=True,
-    )
+    proc = subprocess.Popen(cmd, start_new_session=True)
 
     while True:
         time.sleep(POLL_INTERVAL)
 
         if proc.poll() is not None:
-            tail.terminate()
-            log_file.close()
             print(f"vllm process died with exit code {proc.returncode}", file=sys.stderr)
             return 1
 
         try:
             resp = urllib.request.urlopen(HEALTH_URL, timeout=5)
             if resp.status == 200:
-                tail.terminate()
-                print("Health check passed. Server running as PID %d." % proc.pid)
+                print("Health check passed.")
                 return 0
         except (urllib.error.URLError, OSError):
             pass
