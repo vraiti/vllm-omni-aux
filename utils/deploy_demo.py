@@ -16,8 +16,7 @@ LOG_DIR = "/tmp/logs"
 LOG_PATH = os.path.join(LOG_DIR, time.strftime("demo-%d%m%Y-%H%M%S.log"))
 MODEL_PATH = os.environ.get(
     "MODEL_PATH",
-    "/opt/dlami/nvme/home-cache/huggingface/hub/models--openbmb--MiniCPM-o-4_5/"
-    "snapshots/073dbbc8c5bc0af2d789e1ce12e7c17a6be746e1",
+    "openbmb/MiniCPM-o-4_5",
 )
 BACKEND_PORT = 22500
 POLL_INTERVAL = 5
