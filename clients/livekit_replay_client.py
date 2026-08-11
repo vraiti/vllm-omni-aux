@@ -10,6 +10,29 @@ import time
 
 import aiohttp
 
+_VOICE_NAME = "replay-ref"
+_REF_AUDIO_PATH = os.path.join(os.path.dirname(__file__), "reference-audio.wav")
+
+
+async def _upload_voice(args):
+    url = f"http://{args.host}:{args.port}/v1/audio/voices"
+    form = aiohttp.FormData()
+    form.add_field("name", _VOICE_NAME)
+    form.add_field("consent", "replay-client")
+    form.add_field(
+        "audio_sample",
+        open(_REF_AUDIO_PATH, "rb"),
+        filename="reference-audio.wav",
+        content_type="audio/wav",
+    )
+    async with aiohttp.ClientSession() as client:
+        async with client.post(url, data=form) as resp:
+            body = await resp.json()
+            if resp.status == 200:
+                print(f"Uploaded voice '{_VOICE_NAME}'")
+            else:
+                print(f"Voice upload: {resp.status} {body}")
+
 
 async def replay(args):
     with open(args.inbound_log) as f:
@@ -18,6 +41,9 @@ async def replay(args):
     if not records:
         print("No records in inbound log", file=sys.stderr)
         return 1
+
+    if args.voice:
+        await _upload_voice(args)
 
     url = f"ws://{args.host}:{args.port}/v1/realtime?model={args.model}"
     print(f"Connecting to {url}")
@@ -30,6 +56,14 @@ async def replay(args):
         print(f"Connection failed: {e}", file=sys.stderr)
         await session.close()
         return 1
+
+    if args.voice:
+        voice_update = {
+            "type": "session.update",
+            "session": {"output": {"voice": _VOICE_NAME}},
+        }
+        print(f"  [  0.000s] -> session.update (voice={_VOICE_NAME})")
+        await ws.send_str(json.dumps(voice_update))
 
     outbound_log = open(args.outbound_log, "w")
     recv_task = asyncio.create_task(_print_responses(ws, args, outbound_log))
@@ -99,10 +133,18 @@ async def _print_responses(ws, args, outbound_log):
         pass
 
 
+_SESSION_DIR = os.path.dirname(__file__)
+_VAD_SESSIONS = {
+    "client": os.path.join(_SESSION_DIR, "livekit_session_client_vad.jsonl"),
+    "semantic": os.path.join(_SESSION_DIR, "livekit_session_semantic_vad.jsonl"),
+}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--inbound_log", help="Path to session JSONL",
-                        default=os.path.join(os.path.dirname(__file__), "livekit_session.jsonl"))
+    parser.add_argument("--vad", choices=list(_VAD_SESSIONS), default="client",
+                        help="VAD mode session to replay (default: client)")
+    parser.add_argument("--inbound_log", help="Path to session JSONL (overrides --vad)")
     parser.add_argument("--host", default="localhost")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--model", default="Qwen/Qwen3-Omni-30B-A3B-Instruct")
@@ -122,7 +164,11 @@ def main():
                         help="Path to write server responses (overwritten)")
     parser.add_argument("--dump-responses", action="store_true",
                         help="Print full JSON of server responses")
+    parser.add_argument("--voice", action="store_true",
+                        help="Upload reference-audio.wav and select it via session.update")
     args = parser.parse_args()
+    if args.inbound_log is None:
+        args.inbound_log = _VAD_SESSIONS[args.vad]
 
     async def run():
         if args.timeout > 0:
