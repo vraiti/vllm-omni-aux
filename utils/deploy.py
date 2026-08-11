@@ -15,7 +15,8 @@ VLLM_OMNI_AUX_DIR = "/app/vllm-omni-aux"
 VLLM_DIR = "/app/vllm"
 VENV_DIR = "/app/venv"
 DEPLOY_CONFIGS_DIR = os.path.join(VLLM_OMNI_AUX_DIR, "deploy-configs")
-LOG_PATH = "/tmp/logs/vllm.log"
+LOG_DIR = "/tmp/logs"
+LOG_PATH = os.path.join(LOG_DIR, time.strftime("vllm-%d%m%Y-%H%M%S.log"))
 HEALTH_URL = "http://localhost:8000/health"
 POLL_INTERVAL = 2
 
@@ -162,7 +163,8 @@ def main():
     kill_gpu_processes()
     sync_vllm_source()
 
-    os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
+    os.makedirs(LOG_DIR, exist_ok=True)
+    print(f"Log file: {LOG_PATH}")
     vllm_bin = os.path.join(VENV_DIR, "bin", "vllm")
     serve_cmd = f"{vllm_bin} serve --omni {model} --deploy {deploy_path}"
     cmd = ["bash", "-c", f"{serve_cmd} 2>&1 | tee {LOG_PATH}"]
