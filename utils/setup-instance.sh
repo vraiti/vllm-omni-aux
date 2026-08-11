@@ -5,6 +5,8 @@ BRANCH="${1:?Usage: $0 <branch>}"
 
 VLLM_OMNI_ORIGIN="https://github.com/vllm-project/vllm-omni.git"
 VLLM_OMNI_FORK="https://github.com/vraiti/vllm-omni.git"
+VLLM_ORIGIN="https://github.com/vllm-project/vllm.git"
+VLLM_FORK="https://github.com/vraiti/vllm.git"
 VLLM_OMNI_AUX_ORIGIN="https://github.com/vraiti/vllm-omni-aux.git"
 
 sudo mkdir -p /app
@@ -14,6 +16,13 @@ echo "Cloning vllm-omni..."
 git clone "$VLLM_OMNI_ORIGIN" /app/vllm-omni
 cd /app/vllm-omni
 git remote add fork "$VLLM_OMNI_FORK"
+git fetch fork
+git checkout "$BRANCH"
+
+echo "Cloning vllm..."
+git clone "$VLLM_ORIGIN" /app/vllm
+cd /app/vllm
+git remote add fork "$VLLM_FORK"
 git fetch fork
 git checkout "$BRANCH"
 

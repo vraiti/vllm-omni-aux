@@ -46,6 +46,7 @@ trap 'popd > /dev/null' EXIT
 
 AUX_DIR="$PROJECT_DIR/vllm-omni-aux"
 OMNI_DIR="$PROJECT_DIR/vllm-omni"
+VLLM_DIR="$PROJECT_DIR/vllm"
 
 auto_commit_and_push() {
     local repo_dir="$1"
@@ -58,15 +59,19 @@ auto_commit_and_push() {
 
 BRANCH=$(git -C "$OMNI_DIR" branch --show-current)
 AUX_BRANCH=$(git -C "$AUX_DIR" branch --show-current)
+VLLM_BRANCH=$(git -C "$VLLM_DIR" branch --show-current)
 
 auto_commit_and_push "$OMNI_DIR"
 auto_commit_and_push "$AUX_DIR"
+auto_commit_and_push "$VLLM_DIR"
 
 OMNI_REMOTE=$(git -C "$OMNI_DIR" config "branch.$BRANCH.remote")
 AUX_REMOTE=$(git -C "$AUX_DIR" config "branch.$AUX_BRANCH.remote")
+VLLM_REMOTE=$(git -C "$VLLM_DIR" config "branch.$VLLM_BRANCH.remote")
 
 ssh "$SSH_ALIAS" "cd /app/vllm-omni && git fetch --all && git checkout $BRANCH && git reset --hard $OMNI_REMOTE/$BRANCH"
 ssh "$SSH_ALIAS" "cd /app/vllm-omni-aux && git fetch --all && git checkout $AUX_BRANCH && git reset --hard $AUX_REMOTE/$AUX_BRANCH"
+ssh "$SSH_ALIAS" "cd /app/vllm && git fetch --all && git checkout $VLLM_BRANCH && git reset --hard $VLLM_REMOTE/$VLLM_BRANCH"
 
 REMOTE_CMD="$1"
 shift

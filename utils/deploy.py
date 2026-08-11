@@ -12,6 +12,7 @@ from pathlib import Path
 
 VLLM_OMNI_DIR = "/app/vllm-omni"
 VLLM_OMNI_AUX_DIR = "/app/vllm-omni-aux"
+VLLM_DIR = "/app/vllm"
 VENV_DIR = "/app/venv"
 DEPLOY_CONFIGS_DIR = os.path.join(VLLM_OMNI_AUX_DIR, "deploy-configs")
 LOG_PATH = "/tmp/logs/vllm.log"
@@ -23,6 +24,54 @@ MODEL_MAP = {
     "minicpm-o": "openbmb/MiniCPM-o-4_5",
     "flux2": "black-forest-labs/FLUX.2-dev",
 }
+
+
+def find_vllm_site_packages():
+    result = subprocess.run(
+        [os.path.join(VENV_DIR, "bin", "python3"), "-c",
+         "import vllm, os; print(os.path.dirname(vllm.__file__))"],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        print(f"WARNING: could not locate vllm site-packages: {result.stderr.strip()}", file=sys.stderr)
+        return None
+    return result.stdout.strip()
+
+
+def sync_vllm_source():
+    src_vllm = os.path.join(VLLM_DIR, "vllm")
+    if not os.path.isdir(src_vllm):
+        print(f"WARNING: {src_vllm} not found, skipping vllm sync")
+        return
+
+    site_vllm = find_vllm_site_packages()
+    if not site_vllm:
+        return
+
+    print(f"Syncing {src_vllm} -> {site_vllm}")
+    copied = 0
+    for root, _dirs, files in os.walk(src_vllm):
+        for fname in files:
+            if not fname.endswith(".py"):
+                continue
+            src_path = os.path.join(root, fname)
+            rel = os.path.relpath(src_path, src_vllm)
+            dst_path = os.path.join(site_vllm, rel)
+            if not os.path.isfile(dst_path):
+                continue
+            with open(src_path, "rb") as f:
+                src_bytes = f.read()
+            with open(dst_path, "rb") as f:
+                dst_bytes = f.read()
+            if src_bytes != dst_bytes:
+                import shutil
+                shutil.copy2(src_path, dst_path)
+                print(f"  updated: {rel}")
+                copied += 1
+    if copied:
+        print(f"Synced {copied} file(s)")
+    else:
+        print("No vllm files changed")
 
 
 def kill_gpu_processes():
@@ -93,6 +142,7 @@ def main():
             os.environ["HF_TOKEN"] = f.read().strip()
 
     kill_gpu_processes()
+    sync_vllm_source()
 
     os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
     vllm_bin = os.path.join(VENV_DIR, "bin", "vllm")
