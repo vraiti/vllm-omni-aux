@@ -66,12 +66,21 @@ def ensure_venv():
         pip = os.path.join(VENV_DIR, "bin", "pip")
         subprocess.check_call([pip, "install", "--upgrade", "pip"])
         subprocess.check_call([
-            pip, "install", "--no-deps", "-r", req_file,
-        ])
-        subprocess.check_call([
             pip, "install", "minicpmo-utils[all]>=1.0.5",
             "transformers==4.51.0", "accelerate==1.12.0",
             "torch>=2.0.0",
+        ])
+        subprocess.check_call([
+            pip, "install", "-r", req_file,
+            "--no-deps",
+        ])
+        subprocess.check_call([
+            pip, "install",
+            "fastapi>=0.128.0", "uvicorn>=0.40.0", "httpx>=0.28.0",
+            "websockets>=16.0", "python-multipart",
+            "pydantic>=2.11.0", "markdown>=3.6", "Pygments>=2.18.0",
+            "numpy>=2.2.0", "tqdm>=4.67.0", "PyYAML>=6.0",
+            "soundfile>=0.12.1",
         ])
     return venv_python
 
