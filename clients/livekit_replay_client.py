@@ -58,12 +58,11 @@ async def replay(args):
         return 1
 
     if args.voice:
-        voice_update = {
-            "type": "session.update",
-            "session": {"audio": {"output": {"voice": _VOICE_NAME}}},
-        }
-        print(f"  [  0.000s] -> session.update (voice={_VOICE_NAME})")
-        await ws.send_str(json.dumps(voice_update))
+        for rec in records:
+            msg = rec["data"]
+            raw = json.dumps(msg)
+            if "__VOICE__" in raw:
+                rec["data"] = json.loads(raw.replace("__VOICE__", _VOICE_NAME))
 
     outbound_log = open(args.outbound_log, "w")
     recv_task = asyncio.create_task(_print_responses(ws, args, outbound_log))
@@ -86,6 +85,9 @@ async def replay(args):
             continue
         if args.skip_session_update and typ == "session.update":
             print(f"  SKIP {typ}")
+            continue
+        if "__VOICE__" in json.dumps(msg):
+            print(f"  SKIP {typ} (no --voice)")
             continue
 
         audio = msg.get("audio", "")
