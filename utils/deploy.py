@@ -166,7 +166,7 @@ def main():
     os.makedirs(LOG_DIR, exist_ok=True)
     print(f"Log file: {LOG_PATH}")
     vllm_bin = os.path.join(VENV_DIR, "bin", "vllm")
-    serve_cmd = f"{vllm_bin} serve --omni {model} --deploy {deploy_path}"
+    serve_cmd = f"{vllm_bin} serve --omni {model} --deploy {deploy_path} --enforce-eager"
     cmd = ["bash", "-c", f"{serve_cmd} 2>&1 | tee {LOG_PATH}"]
 
     env = os.environ.copy()
