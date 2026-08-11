@@ -45,8 +45,7 @@ pushd "$PROJECT_DIR" > /dev/null
 trap 'popd > /dev/null' EXIT
 
 AUX_DIR="$PROJECT_DIR/vllm-omni-aux"
-OMNI_DIR="$PROJECT_DIR/vllm-omni"
-VLLM_DIR="$PROJECT_DIR/vllm"
+REPOS_FILE="$PROJECT_DIR/repos.txt"
 
 auto_commit_and_push() {
     local repo_dir="$1"
@@ -57,21 +56,37 @@ auto_commit_and_push() {
     git -C "$repo_dir" push
 }
 
-BRANCH=$(git -C "$OMNI_DIR" branch --show-current)
-AUX_BRANCH=$(git -C "$AUX_DIR" branch --show-current)
-VLLM_BRANCH=$(git -C "$VLLM_DIR" branch --show-current)
+if [[ ! -f "$REPOS_FILE" ]]; then
+    echo "ERROR: $REPOS_FILE not found" >&2
+    exit 1
+fi
 
-auto_commit_and_push "$OMNI_DIR"
-auto_commit_and_push "$AUX_DIR"
-auto_commit_and_push "$VLLM_DIR"
+while IFS= read -r entry || [[ -n "$entry" ]]; do
+    entry="${entry%%#*}"
+    entry="${entry// /}"
+    [[ -z "$entry" ]] && continue
 
-OMNI_REMOTE=$(git -C "$OMNI_DIR" config "branch.$BRANCH.remote")
-AUX_REMOTE=$(git -C "$AUX_DIR" config "branch.$AUX_BRANCH.remote")
-VLLM_REMOTE=$(git -C "$VLLM_DIR" config "branch.$VLLM_BRANCH.remote")
+    repo_name="${entry%%:*}"
+    suffix="${entry#"$repo_name"}"
+    suffix="${suffix#:}"
+    repo_dir="$PROJECT_DIR/$repo_name"
 
-ssh "$SSH_ALIAS" "cd /app/vllm-omni && git fetch --all && git checkout $BRANCH && git reset --hard $OMNI_REMOTE/$BRANCH"
-ssh "$SSH_ALIAS" "cd /app/vllm-omni-aux && git fetch --all && git checkout $AUX_BRANCH && git reset --hard $AUX_REMOTE/$AUX_BRANCH"
-ssh "$SSH_ALIAS" "cd /app/vllm && git fetch $VLLM_REMOTE $VLLM_BRANCH && git checkout $VLLM_BRANCH && git reset --hard $VLLM_REMOTE/$VLLM_BRANCH"
+    if [[ ! -d "$repo_dir/.git" ]]; then
+        echo "WARNING: $repo_dir is not a git repo, skipping"
+        continue
+    fi
+
+    branch=$(git -C "$repo_dir" branch --show-current)
+    remote=$(git -C "$repo_dir" config "branch.$branch.remote")
+
+    auto_commit_and_push "$repo_dir"
+
+    if [[ "$suffix" == "site-package" ]]; then
+        ssh "$SSH_ALIAS" "cd /app/$repo_name && git fetch $remote $branch && git checkout $branch && git reset --hard $remote/$branch"
+    else
+        ssh "$SSH_ALIAS" "cd /app/$repo_name && git fetch --all && git checkout $branch && git reset --hard $remote/$branch"
+    fi
+done < "$REPOS_FILE"
 
 REMOTE_CMD="$1"
 shift
