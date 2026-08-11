@@ -39,39 +39,57 @@ def find_vllm_site_packages():
 
 
 def sync_vllm_source():
-    src_vllm = os.path.join(VLLM_DIR, "vllm")
-    if not os.path.isdir(src_vllm):
-        print(f"WARNING: {src_vllm} not found, skipping vllm sync")
+    if not os.path.isdir(VLLM_DIR):
+        print(f"WARNING: {VLLM_DIR} not found, skipping vllm sync")
         return
 
     site_vllm = find_vllm_site_packages()
     if not site_vllm:
         return
 
-    print(f"Syncing {src_vllm} -> {site_vllm}")
+    has_parent = subprocess.run(
+        ["git", "rev-parse", "--verify", "HEAD~1"],
+        capture_output=True, cwd=VLLM_DIR,
+    ).returncode == 0
+    if not has_parent:
+        print("No vllm parent commit to diff against, skipping sync")
+        return
+
+    result = subprocess.run(
+        ["git", "diff", "--name-only", "HEAD~1", "HEAD", "--", "vllm/"],
+        capture_output=True, text=True, cwd=VLLM_DIR,
+    )
+    if result.returncode != 0:
+        print(f"WARNING: git diff failed: {result.stderr.strip()}", file=sys.stderr)
+        return
+
+    changed = [f for f in result.stdout.splitlines()
+               if f.strip() and f.startswith("vllm/") and f.endswith(".py")]
+    if not changed:
+        print("No vllm .py files changed")
+        return
+
+    import hashlib
+    import shutil
+    src_vllm = os.path.join(VLLM_DIR, "vllm")
+    print(f"Checking {len(changed)} changed .py file(s)")
     copied = 0
-    for root, _dirs, files in os.walk(src_vllm):
-        for fname in files:
-            if not fname.endswith(".py"):
-                continue
-            src_path = os.path.join(root, fname)
-            rel = os.path.relpath(src_path, src_vllm)
-            dst_path = os.path.join(site_vllm, rel)
-            if not os.path.isfile(dst_path):
-                continue
-            with open(src_path, "rb") as f:
-                src_bytes = f.read()
-            with open(dst_path, "rb") as f:
-                dst_bytes = f.read()
-            if src_bytes != dst_bytes:
-                import shutil
-                shutil.copy2(src_path, dst_path)
-                print(f"  updated: {rel}")
-                copied += 1
+    for rel_path in changed:
+        src_path = os.path.join(VLLM_DIR, rel_path)
+        rel = os.path.relpath(src_path, src_vllm)
+        dst_path = os.path.join(site_vllm, rel)
+        if not os.path.isfile(src_path) or not os.path.isfile(dst_path):
+            continue
+        src_hash = hashlib.sha256(open(src_path, "rb").read()).digest()
+        dst_hash = hashlib.sha256(open(dst_path, "rb").read()).digest()
+        if src_hash != dst_hash:
+            shutil.copy2(src_path, dst_path)
+            print(f"  updated: {rel}")
+            copied += 1
     if copied:
         print(f"Synced {copied} file(s)")
     else:
-        print("No vllm files changed")
+        print("Site-packages already up to date")
 
 
 def kill_gpu_processes():

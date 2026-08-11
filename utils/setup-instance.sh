@@ -20,11 +20,10 @@ git fetch fork
 git checkout "$BRANCH"
 
 echo "Cloning vllm..."
-git clone "$VLLM_ORIGIN" /app/vllm
+git clone --single-branch --branch "$BRANCH" "$VLLM_FORK" /app/vllm
 cd /app/vllm
-git remote add fork "$VLLM_FORK"
-git fetch fork
-git checkout "$BRANCH"
+git remote rename origin fork
+git remote add origin "$VLLM_ORIGIN"
 
 echo "Cloning vllm-omni-aux..."
 git clone "$VLLM_OMNI_AUX_ORIGIN" /app/vllm-omni-aux
