@@ -86,6 +86,11 @@ async def replay(args):
         if args.skip_session_update and typ == "session.update":
             print(f"  SKIP {typ}")
             continue
+        if args.modalities and typ == "session.update":
+            session_data = msg.get("session", {})
+            if "output_modalities" in session_data:
+                session_data["output_modalities"] = args.modalities.split(",")
+                print(f"  OVERRIDE modalities -> {session_data['output_modalities']}")
         if "__VOICE__" in json.dumps(msg):
             print(f"  SKIP {typ} (no --voice)")
             continue
@@ -168,6 +173,8 @@ def main():
                         help="Print full JSON of server responses")
     parser.add_argument("--voice", action="store_true",
                         help="Upload reference-audio.wav and select it via session.update")
+    parser.add_argument("--modalities", default=None,
+                        help="Override output_modalities (e.g. 'text' or 'audio')")
     args = parser.parse_args()
     if args.inbound_log is None:
         args.inbound_log = _VAD_SESSIONS[args.vad]
