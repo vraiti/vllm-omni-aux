@@ -1,14 +1,36 @@
 #!/usr/bin/env python3
-"""Accept WebSocket connections and write received messages to a JSONL file."""
+"""Accept WebSocket connections and write received messages to a JSONL file.
+
+Proxies /health and /v1/models to the vLLM server on localhost:8000.
+"""
 
 import argparse
-import asyncio
 import json
 import time
 from datetime import datetime, timezone
 
 import aiohttp
 from aiohttp import web, WSMsgType
+
+UPSTREAM = "http://localhost:8000"
+PROXY_PATHS = {"/health", "/v1/models"}
+
+
+async def handle_proxy(request: web.Request) -> web.StreamResponse:
+    url = f"{UPSTREAM}{request.path}"
+    async with aiohttp.ClientSession() as client:
+        async with client.request(
+            request.method,
+            url,
+            headers={k: v for k, v in request.headers.items() if k.lower() != "host"},
+            data=await request.read(),
+        ) as resp:
+            response = web.StreamResponse(status=resp.status, headers=resp.headers)
+            await response.prepare(request)
+            async for chunk in resp.content.iter_any():
+                await response.write(chunk)
+            await response.write_eof()
+            return response
 
 
 async def handle_ws(request: web.Request) -> web.WebSocketResponse:
@@ -40,13 +62,19 @@ async def handle_ws(request: web.Request) -> web.WebSocketResponse:
     return ws
 
 
+async def route_handler(request: web.Request):
+    if request.path in PROXY_PATHS:
+        return await handle_proxy(request)
+    return await handle_ws(request)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("port", type=int, help="Port to listen on")
     args = parser.parse_args()
 
     app = web.Application()
-    app.router.add_route("GET", "/{path:.*}", handle_ws)
+    app.router.add_route("*", "/{path:.*}", route_handler)
     web.run_app(app, host="0.0.0.0", port=args.port, print=None)
     print(f"Listening on 0.0.0.0:{args.port}")
 
