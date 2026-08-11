@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Start the MiniCPM-o-Demo backend server on a bare-metal GPU machine.
 
-Kills existing GPU processes, ensures config.json exists, and launches
+Kills existing GPU processes, ensures config.json exists, sets up a
+dedicated venv with the demo's pinned dependencies, and launches
 the py_backend server with model loading and health polling.
 """
 
@@ -12,6 +13,7 @@ import sys
 import time
 
 DEMO_DIR = "/app/MiniCPM-o-Demo"
+VENV_DIR = os.path.join(DEMO_DIR, ".venv")
 LOG_DIR = "/tmp/logs"
 LOG_PATH = os.path.join(LOG_DIR, time.strftime("demo-%d%m%Y-%H%M%S.log"))
 MODEL_PATH = os.environ.get(
@@ -52,6 +54,22 @@ def ensure_config():
             print(f"WARNING: neither config.json nor config.example.json found in {DEMO_DIR}")
 
 
+def ensure_venv():
+    venv_python = os.path.join(VENV_DIR, "bin", "python")
+    if not os.path.isfile(venv_python):
+        print(f"Creating venv at {VENV_DIR}...")
+        subprocess.check_call([sys.executable, "-m", "venv", VENV_DIR])
+
+    req_file = os.path.join(DEMO_DIR, "requirements.txt")
+    if os.path.isfile(req_file):
+        print("Installing requirements into demo venv...")
+        subprocess.check_call([
+            os.path.join(VENV_DIR, "bin", "pip"),
+            "install", "-r", req_file,
+        ])
+    return venv_python
+
+
 def main():
     if not os.path.isdir(DEMO_DIR):
         print(f"ERROR: {DEMO_DIR} not found", file=sys.stderr)
@@ -59,6 +77,7 @@ def main():
 
     kill_gpu_processes()
     ensure_config()
+    venv_python = ensure_venv()
 
     os.makedirs(LOG_DIR, exist_ok=True)
     print(f"Log file: {LOG_PATH}")
@@ -66,7 +85,7 @@ def main():
     print(f"Backend port: {BACKEND_PORT}")
 
     cmd = [
-        sys.executable, "-m", "py_backend.server",
+        venv_python, "-m", "py_backend.server",
         "--host", "0.0.0.0",
         "--port", str(BACKEND_PORT),
         "--model-path", MODEL_PATH,
