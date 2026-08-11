@@ -63,9 +63,15 @@ def ensure_venv():
     req_file = os.path.join(DEMO_DIR, "requirements.txt")
     if os.path.isfile(req_file):
         print("Installing requirements into demo venv...")
+        pip = os.path.join(VENV_DIR, "bin", "pip")
+        subprocess.check_call([pip, "install", "--upgrade", "pip"])
         subprocess.check_call([
-            os.path.join(VENV_DIR, "bin", "pip"),
-            "install", "-r", req_file,
+            pip, "install", "--no-deps", "-r", req_file,
+        ])
+        subprocess.check_call([
+            pip, "install", "minicpmo-utils[all]>=1.0.5",
+            "transformers==4.51.0", "accelerate==1.12.0",
+            "torch>=2.0.0",
         ])
     return venv_python
 
