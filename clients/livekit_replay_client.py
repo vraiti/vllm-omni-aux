@@ -60,7 +60,7 @@ async def replay(args):
     if args.voice:
         voice_update = {
             "type": "session.update",
-            "session": {"output": {"voice": _VOICE_NAME}},
+            "session": {"audio": {"output": {"voice": _VOICE_NAME}}},
         }
         print(f"  [  0.000s] -> session.update (voice={_VOICE_NAME})")
         await ws.send_str(json.dumps(voice_update))
