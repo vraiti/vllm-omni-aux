@@ -63,12 +63,14 @@ def ensure_venv():
     req_file = os.path.join(DEMO_DIR, "requirements.txt")
     if os.path.isfile(req_file):
         print("Installing requirements into demo venv...")
-        pip = os.path.join(VENV_DIR, "bin", "pip")
         subprocess.check_call([
             "uv", "pip", "install", "-r", req_file,
             "--python", venv_python,
-            "--override", "/dev/stdin",
-        ], input=b"librosa>=0.10.2\n")
+        ])
+        subprocess.check_call([
+            "uv", "pip", "install", "librosa>=0.10.2",
+            "--python", venv_python,
+        ])
     return venv_python
 
 
