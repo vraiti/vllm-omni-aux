@@ -64,11 +64,10 @@ def ensure_venv():
     if os.path.isfile(req_file):
         print("Installing requirements into demo venv...")
         pip = os.path.join(VENV_DIR, "bin", "pip")
-        subprocess.check_call([pip, "install", "--upgrade", "pip"])
-        subprocess.check_call([pip, "install", "-r", req_file])
-        subprocess.check_call([
-            pip, "install", "--force-reinstall", "librosa>=0.10.2",
-        ])
+        subprocess.check_call(["uv", "pip", "install", "-r", req_file,
+                               "--python", venv_python])
+        subprocess.check_call(["uv", "pip", "install", "--force-reinstall",
+                               "librosa>=0.10.2", "--python", venv_python])
     return venv_python
 
 
