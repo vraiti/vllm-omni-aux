@@ -4,6 +4,7 @@
 import argparse
 import asyncio
 import json
+import os
 import sys
 import time
 
@@ -100,7 +101,8 @@ async def _print_responses(ws, args, outbound_log):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--inbound_log", help="Path to proxy_inbound.jsonl", default="/tmp/logs/proxy_inbound.jsonl")
+    parser.add_argument("--inbound_log", help="Path to session JSONL",
+                        default=os.path.join(os.path.dirname(__file__), "livekit_session.jsonl"))
     parser.add_argument("--host", default="localhost")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--model", default="Qwen/Qwen3-Omni-30B-A3B-Instruct")
