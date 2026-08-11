@@ -71,7 +71,7 @@ VLLM_REMOTE=$(git -C "$VLLM_DIR" config "branch.$VLLM_BRANCH.remote")
 
 ssh "$SSH_ALIAS" "cd /app/vllm-omni && git fetch --all && git checkout $BRANCH && git reset --hard $OMNI_REMOTE/$BRANCH"
 ssh "$SSH_ALIAS" "cd /app/vllm-omni-aux && git fetch --all && git checkout $AUX_BRANCH && git reset --hard $AUX_REMOTE/$AUX_BRANCH"
-ssh "$SSH_ALIAS" "cd /app/vllm && git fetch --all && git checkout $VLLM_BRANCH && git reset --hard $VLLM_REMOTE/$VLLM_BRANCH"
+ssh "$SSH_ALIAS" "cd /app/vllm && git fetch $VLLM_REMOTE $VLLM_BRANCH && git checkout $VLLM_BRANCH && git reset --hard $VLLM_REMOTE/$VLLM_BRANCH"
 
 REMOTE_CMD="$1"
 shift
