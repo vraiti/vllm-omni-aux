@@ -12,6 +12,7 @@ from pathlib import Path
 
 VLLM_OMNI_DIR = "/app/vllm-omni"
 VLLM_OMNI_AUX_DIR = "/app/vllm-omni-aux"
+VENV_DIR = "/app/venv"
 DEPLOY_CONFIGS_DIR = os.path.join(VLLM_OMNI_AUX_DIR, "deploy-configs")
 LOG_PATH = "/tmp/logs/vllm.log"
 HEALTH_URL = "http://localhost:8000/health"
@@ -94,10 +95,15 @@ def main():
     kill_gpu_processes()
 
     os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
-    serve_cmd = f"vllm serve --omni {model} --deploy {deploy_path}"
+    vllm_bin = os.path.join(VENV_DIR, "bin", "vllm")
+    serve_cmd = f"{vllm_bin} serve --omni {model} --deploy {deploy_path}"
     cmd = ["bash", "-c", f"{serve_cmd} 2>&1 | tee {LOG_PATH}"]
 
-    proc = subprocess.Popen(cmd, start_new_session=True)
+    env = os.environ.copy()
+    env["VIRTUAL_ENV"] = VENV_DIR
+    env["PATH"] = os.path.join(VENV_DIR, "bin") + ":" + env.get("PATH", "")
+
+    proc = subprocess.Popen(cmd, start_new_session=True, env=env)
 
     while True:
         time.sleep(POLL_INTERVAL)
