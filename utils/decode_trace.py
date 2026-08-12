@@ -44,6 +44,42 @@ def strip_ansi(s: str) -> str:
     return re.sub(r"\x1b\[[0-9;]*m", "", s)
 
 
+def collect_vllm_ids(lines: list[str]) -> list[int]:
+    all_ids = []
+    for line in lines:
+        line = strip_ansi(line)
+        m = VLLM_FORWARD_RE.search(line)
+        if not m:
+            continue
+        all_ids.extend(ast.literal_eval(m.group(1)))
+    return all_ids
+
+
+def collect_demo_ids(lines: list[str]) -> list[int]:
+    all_ids = []
+    for line in lines:
+        line = strip_ansi(line)
+        m = DEMO_PREFILL_RE.search(line)
+        if m:
+            all_ids.extend(ast.literal_eval(m.group(3)))
+            continue
+        m = DEMO_TOKEN_STEP_RE.search(line)
+        if m:
+            all_ids.append(int(m.group(3)))
+            continue
+        m = DEMO_FINALIZE_RE.search(line)
+        if m:
+            all_ids.extend(ast.literal_eval(m.group(1)))
+            continue
+    return all_ids
+
+
+def process_flat(all_ids: list[int], tokenizer):
+    for i, tid in enumerate(all_ids):
+        text = tokenizer.decode([tid])
+        print(f"{i:>5d}  {tid:>8d}  {text!r}")
+
+
 def process_vllm_log(lines: list[str], tokenizer):
     step = 0
     for line in lines:
@@ -117,6 +153,8 @@ def main():
                         help="HuggingFace model ID for tokenizer")
     parser.add_argument("--format", choices=["vllm", "demo", "auto"],
                         default="auto", help="Log format (default: auto-detect)")
+    parser.add_argument("--flat", action="store_true",
+                        help="Print flat token sequence (index, id, decoded text)")
     args = parser.parse_args()
 
     with open(args.logfile) as f:
@@ -134,7 +172,13 @@ def main():
     tokenizer = load_tokenizer(args.model)
     print("Tokenizer loaded.", file=sys.stderr)
 
-    if fmt == "vllm":
+    if args.flat:
+        if fmt == "vllm":
+            all_ids = collect_vllm_ids(lines)
+        else:
+            all_ids = collect_demo_ids(lines)
+        process_flat(all_ids, tokenizer)
+    elif fmt == "vllm":
         process_vllm_log(lines, tokenizer)
     else:
         process_demo_log(lines, tokenizer)
