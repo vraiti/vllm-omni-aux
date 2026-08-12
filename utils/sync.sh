@@ -75,8 +75,8 @@ while IFS= read -r entry || [[ -n "$entry" ]]; do
     auto_commit_and_push "$repo_dir"
 
     if [[ "$suffix" == "site-package" ]]; then
-        ssh "$SSH_ALIAS" "cd /app/$repo_name && git fetch $remote $branch && git checkout $branch && git reset --hard $remote/$branch"
+        ssh -n "$SSH_ALIAS" "cd /app/$repo_name && git fetch $remote $branch && git checkout $branch && git reset --hard $remote/$branch"
     else
-        ssh "$SSH_ALIAS" "cd /app/$repo_name && git fetch --all && git checkout $branch && git reset --hard $remote/$branch"
+        ssh -n "$SSH_ALIAS" "cd /app/$repo_name && git fetch --all && git checkout $branch && git reset --hard $remote/$branch"
     fi
 done < "$REPOS_FILE"
