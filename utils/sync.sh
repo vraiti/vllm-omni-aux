@@ -40,15 +40,6 @@ trap 'popd > /dev/null' EXIT
 
 REPOS_FILE="$PROJECT_DIR/repos.txt"
 
-auto_commit_and_push() {
-    local repo_dir="$1"
-    if [[ -n "$(git -C "$repo_dir" status --porcelain)" ]]; then
-        git -C "$repo_dir" add -A
-        git -C "$repo_dir" commit -s -m "auto-commit $(date '+%H:%M:%S %m/%d/%Y')"
-    fi
-    git -C "$repo_dir" push
-}
-
 if [[ ! -f "$REPOS_FILE" ]]; then
     echo "ERROR: $REPOS_FILE not found" >&2
     exit 1
@@ -72,7 +63,12 @@ while IFS= read -r entry || [[ -n "$entry" ]]; do
     branch=$(git -C "$repo_dir" branch --show-current)
     remote=$(git -C "$repo_dir" config "branch.$branch.remote")
 
-    auto_commit_and_push "$repo_dir"
+    if [[ -n "$(git -C "$repo_dir" status --porcelain)" ]]; then
+        echo "ERROR: $repo_dir has uncommitted changes" >&2
+        exit 1
+    fi
+
+    git -C "$repo_dir" push
 
     if [[ "$suffix" == "site-package" ]]; then
         ssh -n "$SSH_ALIAS" "cd /app/$repo_name && git fetch $remote $branch && git checkout $branch && git reset --hard $remote/$branch"
