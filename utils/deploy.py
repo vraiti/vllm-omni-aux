@@ -82,6 +82,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("model_key")
     parser.add_argument("deploy_config", nargs="?", default=None)
+    parser.add_argument("-i", action="store_true",
+                        help="Interactive: attach to server stdio, no health polling")
     args = parser.parse_args()
 
     model = resolve_model(args.model_key)
@@ -106,6 +108,15 @@ def main():
         f'{vllm} serve --omni {model} --deploy {deploy_path} --enforce-eager'
     )
     cmd = ["bash", "-c", f"{serve_cmd} 2>&1 | tee {LOG_PATH}"]
+
+    if args.i:
+        proc = subprocess.Popen(cmd, env=env)
+        try:
+            return proc.wait()
+        except KeyboardInterrupt:
+            proc.terminate()
+            proc.wait()
+            return 130
 
     proc = subprocess.Popen(cmd, start_new_session=True, env=env)
 
