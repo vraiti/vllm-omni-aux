@@ -4,7 +4,6 @@ import os
 import signal
 import subprocess
 import sys
-import textwrap
 import time
 import urllib.request
 import urllib.error
@@ -25,16 +24,6 @@ MODEL_MAP = {
     "minicpm-o": "openbmb/MiniCPM-o-4_5",
     "flux2": "black-forest-labs/FLUX.2-dev",
 }
-
-
-JURIGGED_BOOTSTRAP = textwrap.dedent("""\
-    import os
-    os.environ["JURIGGED_WATCH_DIR"] = "{watch_dir}"
-    import jurigged
-    jurigged.watch("{watch_dir}")
-    from vllm.scripts import main
-    main()
-""")
 
 
 def kill_gpu_processes():
@@ -111,13 +100,10 @@ def main():
 
     os.makedirs(LOG_DIR, exist_ok=True)
     print(f"Log file: {LOG_PATH}")
-    print(f"jurigged watching: {VLLM_OMNI_DIR}")
 
-    bootstrap = JURIGGED_BOOTSTRAP.format(watch_dir=VLLM_OMNI_DIR)
-    python = os.path.join(VENV_DIR, "bin", "python3")
+    vllm = os.path.join(VENV_DIR, "bin", "vllm")
     serve_cmd = (
-        f'{python} -c {repr(bootstrap)}'
-        f' serve --omni {model} --deploy {deploy_path} --enforce-eager'
+        f'{vllm} serve --omni {model} --deploy {deploy_path} --enforce-eager'
     )
     cmd = ["bash", "-c", f"{serve_cmd} 2>&1 | tee {LOG_PATH}"]
 
@@ -133,7 +119,7 @@ def main():
         try:
             resp = urllib.request.urlopen(HEALTH_URL, timeout=5)
             if resp.status == 200:
-                print("Health check passed. Server running with hotswap enabled.")
+                print("Health check passed. Server is ready.")
                 return 0
         except (urllib.error.URLError, OSError):
             pass

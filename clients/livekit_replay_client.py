@@ -3,8 +3,10 @@
 
 import argparse
 import asyncio
+import base64
 import json
 import os
+import struct
 import sys
 import time
 
@@ -32,6 +34,35 @@ async def _upload_voice(args):
                 print(f"Uploaded voice '{_VOICE_NAME}'")
             else:
                 print(f"Voice upload: {resp.status} {body}")
+
+
+def _write_stereo_wav(path, left, right, sample_rate=24000):
+    """Write a stereo WAV from two mono PCM16 byte buffers."""
+    left_b, right_b = bytes(left), bytes(right)
+    n_left = len(left_b) // 2
+    n_right = len(right_b) // 2
+    n_samples = max(n_left, n_right)
+    left_samples = struct.unpack(f"<{n_left}h", left_b) + (0,) * (n_samples - n_left)
+    right_samples = struct.unpack(f"<{n_right}h", right_b) + (0,) * (n_samples - n_right)
+    interleaved = b"".join(
+        struct.pack("<hh", left_samples[i], right_samples[i])
+        for i in range(n_samples)
+    )
+    num_channels = 2
+    bits_per_sample = 16
+    byte_rate = sample_rate * num_channels * bits_per_sample // 8
+    block_align = num_channels * bits_per_sample // 8
+    data_size = len(interleaved)
+    with open(path, "wb") as f:
+        f.write(b"RIFF")
+        f.write(struct.pack("<I", 36 + data_size))
+        f.write(b"WAVE")
+        f.write(b"fmt ")
+        f.write(struct.pack("<IHHIIHH", 16, 1, num_channels, sample_rate,
+                            byte_rate, block_align, bits_per_sample))
+        f.write(b"data")
+        f.write(struct.pack("<I", data_size))
+        f.write(interleaved)
 
 
 async def replay(args):
@@ -64,8 +95,11 @@ async def replay(args):
             if "__VOICE__" in raw:
                 rec["data"] = json.loads(raw.replace("__VOICE__", _VOICE_NAME))
 
+    client_audio = bytearray()
+    server_audio = bytearray()
+
     outbound_log = open(args.outbound_log, "w")
-    recv_task = asyncio.create_task(_print_responses(ws, args, outbound_log))
+    recv_task = asyncio.create_task(_print_responses(ws, args, outbound_log, server_audio))
 
     t0_capture = records[0]["ts"]
     t0_wall = time.monotonic()
@@ -96,6 +130,8 @@ async def replay(args):
             continue
 
         audio = msg.get("audio", "")
+        if audio:
+            client_audio.extend(base64.b64decode(audio))
         extra = f" ({len(audio)} chars b64)" if audio else ""
         elapsed = time.monotonic() - t0_wall
         print(f"  [{elapsed:7.3f}s] -> {typ}{extra}")
@@ -110,22 +146,30 @@ async def replay(args):
     outbound_log.close()
     await ws.close()
     await session.close()
+
+    if client_audio or server_audio:
+        _write_stereo_wav(args.audio_out, client_audio, server_audio)
+        print(f"Wrote merged audio to {args.audio_out} "
+              f"(client={len(client_audio)}B, server={len(server_audio)}B)")
+
     return 0
 
 
-async def _print_responses(ws, args, outbound_log):
+async def _print_responses(ws, args, outbound_log, server_audio):
     try:
         async for msg in ws:
             if msg.type == aiohttp.WSMsgType.TEXT:
                 data = json.loads(msg.data)
                 typ = data.get("type", "?")
                 detail = ""
-                if typ == "response.audio.delta":
-                    audio = data.get("delta", "")
-                    detail = f" ({len(audio)} chars b64)"
+                if typ in ("response.audio.delta", "response.output_audio.delta"):
+                    delta = data.get("delta", "")
+                    detail = f" ({len(delta)} chars b64)"
+                    if delta:
+                        server_audio.extend(base64.b64decode(delta))
                 elif typ == "error":
                     detail = f" {data.get('error', data.get('message', ''))}"
-                elif typ == "response.audio_transcript.delta":
+                elif typ in ("response.audio_transcript.delta", "response.output_audio_transcript.delta"):
                     detail = f" {data.get('delta', '')!r}"
                 print(f"  <-  {typ}{detail}")
                 if args.dump_responses:
@@ -175,6 +219,8 @@ def main():
                         help="Upload reference-audio.wav and select it via session.update")
     parser.add_argument("--modalities", default=None,
                         help="Override output_modalities (e.g. 'text' or 'audio')")
+    parser.add_argument("--audio-out", default="/tmp/logs/replay_merged.wav",
+                        help="Path to write merged stereo WAV (left=client, right=server)")
     args = parser.parse_args()
     if args.inbound_log is None:
         args.inbound_log = _VAD_SESSIONS[args.vad]
