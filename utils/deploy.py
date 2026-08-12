@@ -4,6 +4,7 @@ import os
 import signal
 import subprocess
 import sys
+import textwrap
 import time
 import urllib.request
 import urllib.error
@@ -12,7 +13,6 @@ from pathlib import Path
 
 VLLM_OMNI_DIR = "/app/vllm-omni"
 VLLM_OMNI_AUX_DIR = "/app/vllm-omni-aux"
-VLLM_DIR = "/app/vllm"
 VENV_DIR = "/app/venv"
 DEPLOY_CONFIGS_DIR = os.path.join(VLLM_OMNI_AUX_DIR, "deploy-configs")
 LOG_DIR = "/tmp/logs"
@@ -27,70 +27,14 @@ MODEL_MAP = {
 }
 
 
-def find_vllm_site_packages():
-    result = subprocess.run(
-        [os.path.join(VENV_DIR, "bin", "python3"), "-c",
-         "import vllm, os; print(os.path.dirname(vllm.__file__))"],
-        capture_output=True, text=True,
-    )
-    if result.returncode != 0:
-        print(f"WARNING: could not locate vllm site-packages: {result.stderr.strip()}", file=sys.stderr)
-        return None
-    return result.stdout.strip()
-
-
-def sync_vllm_source():
-    if not os.path.isdir(VLLM_DIR):
-        print(f"WARNING: {VLLM_DIR} not found, skipping vllm sync")
-        return
-
-    site_vllm = find_vllm_site_packages()
-    if not site_vllm:
-        return
-
-    has_parent = subprocess.run(
-        ["git", "rev-parse", "--verify", "HEAD~1"],
-        capture_output=True, cwd=VLLM_DIR,
-    ).returncode == 0
-    if not has_parent:
-        print("No vllm parent commit to diff against, skipping sync")
-        return
-
-    result = subprocess.run(
-        ["git", "diff", "--name-only", "HEAD~1", "HEAD", "--", "vllm/"],
-        capture_output=True, text=True, cwd=VLLM_DIR,
-    )
-    if result.returncode != 0:
-        print(f"WARNING: git diff failed: {result.stderr.strip()}", file=sys.stderr)
-        return
-
-    changed = [f for f in result.stdout.splitlines()
-               if f.strip() and f.startswith("vllm/") and f.endswith(".py")]
-    if not changed:
-        print("No vllm .py files changed")
-        return
-
-    import hashlib
-    import shutil
-    src_vllm = os.path.join(VLLM_DIR, "vllm")
-    print(f"Checking {len(changed)} changed .py file(s)")
-    copied = 0
-    for rel_path in changed:
-        src_path = os.path.join(VLLM_DIR, rel_path)
-        rel = os.path.relpath(src_path, src_vllm)
-        dst_path = os.path.join(site_vllm, rel)
-        if not os.path.isfile(src_path) or not os.path.isfile(dst_path):
-            continue
-        src_hash = hashlib.sha256(open(src_path, "rb").read()).digest()
-        dst_hash = hashlib.sha256(open(dst_path, "rb").read()).digest()
-        if src_hash != dst_hash:
-            shutil.copy2(src_path, dst_path)
-            print(f"  updated: {rel}")
-            copied += 1
-    if copied:
-        print(f"Synced {copied} file(s)")
-    else:
-        print("Site-packages already up to date")
+JURIGGED_BOOTSTRAP = textwrap.dedent("""\
+    import os
+    os.environ["JURIGGED_WATCH_DIR"] = "{watch_dir}"
+    import jurigged
+    jurigged.watch("{watch_dir}")
+    from vllm.scripts import main
+    main()
+""")
 
 
 def kill_gpu_processes():
@@ -110,6 +54,13 @@ def kill_gpu_processes():
             pass
 
 
+def gpu_count():
+    result = subprocess.run(
+        ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
+        capture_output=True, text=True,
+    )
+    return len([l for l in result.stdout.splitlines() if l.strip()])
+
 
 def resolve_model(key):
     model = MODEL_MAP.get(key)
@@ -118,14 +69,6 @@ def resolve_model(key):
         print(f"ERROR: unknown model key '{key}' (valid: {valid})", file=sys.stderr)
         sys.exit(1)
     return model
-
-
-def gpu_count():
-    result = subprocess.run(
-        ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
-        capture_output=True, text=True,
-    )
-    return len([l for l in result.stdout.splitlines() if l.strip()])
 
 
 def resolve_deploy_config(model_key, config_name=None):
@@ -161,17 +104,22 @@ def main():
             os.environ["HF_TOKEN"] = f.read().strip()
 
     kill_gpu_processes()
-    sync_vllm_source()
-
-    os.makedirs(LOG_DIR, exist_ok=True)
-    print(f"Log file: {LOG_PATH}")
-    vllm_bin = os.path.join(VENV_DIR, "bin", "vllm")
-    serve_cmd = f"{vllm_bin} serve --omni {model} --deploy {deploy_path} --enforce-eager"
-    cmd = ["bash", "-c", f"{serve_cmd} 2>&1 | tee {LOG_PATH}"]
 
     env = os.environ.copy()
     env["VIRTUAL_ENV"] = VENV_DIR
     env["PATH"] = os.path.join(VENV_DIR, "bin") + ":" + env.get("PATH", "")
+
+    os.makedirs(LOG_DIR, exist_ok=True)
+    print(f"Log file: {LOG_PATH}")
+    print(f"jurigged watching: {VLLM_OMNI_DIR}")
+
+    bootstrap = JURIGGED_BOOTSTRAP.format(watch_dir=VLLM_OMNI_DIR)
+    python = os.path.join(VENV_DIR, "bin", "python3")
+    serve_cmd = (
+        f'{python} -c {repr(bootstrap)}'
+        f' serve --omni {model} --deploy {deploy_path} --enforce-eager'
+    )
+    cmd = ["bash", "-c", f"{serve_cmd} 2>&1 | tee {LOG_PATH}"]
 
     proc = subprocess.Popen(cmd, start_new_session=True, env=env)
 
@@ -185,7 +133,7 @@ def main():
         try:
             resp = urllib.request.urlopen(HEALTH_URL, timeout=5)
             if resp.status == 200:
-                print("Health check passed.")
+                print("Health check passed. Server running with hotswap enabled.")
                 return 0
         except (urllib.error.URLError, OSError):
             pass
