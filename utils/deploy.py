@@ -114,12 +114,14 @@ def main():
 
         if proc.poll() is not None:
             print(f"vllm process died with exit code {proc.returncode}", file=sys.stderr)
+            print(f"Log file: {LOG_PATH}", file=sys.stderr)
             return 1
 
         try:
             resp = urllib.request.urlopen(HEALTH_URL, timeout=5)
             if resp.status == 200:
-                print("Health check passed. Server is ready.")
+                print(f"Health check passed. Server is ready.")
+                print(f"Log file: {LOG_PATH}")
                 return 0
         except (urllib.error.URLError, OSError):
             pass
