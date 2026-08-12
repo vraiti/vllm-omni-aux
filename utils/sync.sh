@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -exuo pipefail
 
 resolve_alias() {
     local configs=( ~/.ssh/config.d/* )
