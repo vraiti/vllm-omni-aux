@@ -36,6 +36,21 @@ async def _upload_voice(args):
                 print(f"Voice upload: {resp.status} {body}")
 
 
+def _build_timed_buffer(chunks, sample_rate=24000):
+    """Build a mono PCM16 buffer from [(elapsed_seconds, pcm_bytes), ...]."""
+    if not chunks:
+        return b""
+    bytes_per_sample = 2
+    buf = bytearray()
+    for t, data in chunks:
+        offset = int(t * sample_rate) * bytes_per_sample
+        end = offset + len(data)
+        if end > len(buf):
+            buf.extend(b"\x00" * (end - len(buf)))
+        buf[offset:offset + len(data)] = data
+    return bytes(buf)
+
+
 def _write_stereo_wav(path, left, right, sample_rate=24000):
     """Write a stereo WAV from two mono PCM16 byte buffers."""
     left_b, right_b = bytes(left), bytes(right)
@@ -95,14 +110,13 @@ async def replay(args):
             if "__VOICE__" in raw:
                 rec["data"] = json.loads(raw.replace("__VOICE__", _VOICE_NAME))
 
-    client_audio = bytearray()
-    server_audio = bytearray()
+    client_audio_chunks = []
+    server_audio_chunks = []
 
     outbound_log = open(args.outbound_log, "w")
-    recv_task = asyncio.create_task(_print_responses(ws, args, outbound_log, server_audio))
-
     t0_capture = records[0]["ts"]
     t0_wall = time.monotonic()
+    recv_task = asyncio.create_task(_print_responses(ws, args, outbound_log, server_audio_chunks, t0_wall))
 
     for rec in records:
         if args.speed > 0:
@@ -131,7 +145,8 @@ async def replay(args):
 
         audio = msg.get("audio", "")
         if audio:
-            client_audio.extend(base64.b64decode(audio))
+            elapsed = time.monotonic() - t0_wall
+            client_audio_chunks.append((elapsed, base64.b64decode(audio)))
         extra = f" ({len(audio)} chars b64)" if audio else ""
         elapsed = time.monotonic() - t0_wall
         print(f"  [{elapsed:7.3f}s] -> {typ}{extra}")
@@ -147,15 +162,17 @@ async def replay(args):
     await ws.close()
     await session.close()
 
-    if client_audio or server_audio:
-        _write_stereo_wav(args.audio_out, client_audio, server_audio)
+    if client_audio_chunks or server_audio_chunks:
+        client_buf = _build_timed_buffer(client_audio_chunks)
+        server_buf = _build_timed_buffer(server_audio_chunks)
+        _write_stereo_wav(args.audio_out, client_buf, server_buf)
         print(f"Wrote merged audio to {args.audio_out} "
-              f"(client={len(client_audio)}B, server={len(server_audio)}B)")
+              f"(client={len(client_buf)}B, server={len(server_buf)}B)")
 
     return 0
 
 
-async def _print_responses(ws, args, outbound_log, server_audio):
+async def _print_responses(ws, args, outbound_log, server_audio_chunks, t0_wall):
     try:
         async for msg in ws:
             if msg.type == aiohttp.WSMsgType.TEXT:
@@ -166,7 +183,8 @@ async def _print_responses(ws, args, outbound_log, server_audio):
                     delta = data.get("delta", "")
                     detail = f" ({len(delta)} chars b64)"
                     if delta:
-                        server_audio.extend(base64.b64decode(delta))
+                        elapsed = time.monotonic() - t0_wall
+                        server_audio_chunks.append((elapsed, base64.b64decode(delta)))
                 elif typ == "error":
                     detail = f" {data.get('error', data.get('message', ''))}"
                 elif typ in ("response.audio_transcript.delta", "response.output_audio_transcript.delta"):
