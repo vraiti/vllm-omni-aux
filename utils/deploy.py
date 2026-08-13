@@ -105,7 +105,7 @@ def main():
 
     vllm = os.path.join(VENV_DIR, "bin", "vllm")
     serve_cmd = (
-        f'{vllm} serve --omni {model} --deploy {deploy_path}'
+        f'{vllm} serve --omni {model} --deploy {deploy_path} --enforce-eager'
     )
     cmd = ["bash", "-c", f"{serve_cmd} 2>&1 | tee {LOG_PATH}"]
 
