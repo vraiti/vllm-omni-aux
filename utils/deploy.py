@@ -101,6 +101,13 @@ def main():
     env["PATH"] = os.path.join(VENV_DIR, "bin") + ":" + env.get("PATH", "")
 
     os.makedirs(LOG_DIR, exist_ok=True)
+    Path(LOG_PATH).touch()
+    stable_log = os.path.join(LOG_DIR, "vllm.log")
+    try:
+        os.remove(stable_log)
+    except FileNotFoundError:
+        pass
+    os.link(LOG_PATH, stable_log)
     print(f"Log file: {LOG_PATH}")
 
     vllm = os.path.join(VENV_DIR, "bin", "vllm")
