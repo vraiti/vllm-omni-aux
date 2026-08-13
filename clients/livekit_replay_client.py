@@ -112,11 +112,13 @@ async def replay(args):
 
     client_audio_chunks = []
     server_audio_chunks = []
+    response_done_event = asyncio.Event()
+    response_done_event.set()
 
     outbound_log = open(args.outbound_log, "w")
     t0_capture = records[0]["ts"]
     t0_wall = time.monotonic()
-    recv_task = asyncio.create_task(_print_responses(ws, args, outbound_log, server_audio_chunks, t0_wall))
+    recv_task = asyncio.create_task(_print_responses(ws, args, outbound_log, server_audio_chunks, t0_wall, response_done_event))
 
     for rec in records:
         if args.speed > 0:
@@ -153,6 +155,12 @@ async def replay(args):
 
         await ws.send_str(json.dumps(msg))
 
+        if args.wait_for_response and typ == "response.create":
+            print(f"  Waiting for response.done...")
+            response_done_event.clear()
+            await response_done_event.wait()
+            print(f"  [{time.monotonic() - t0_wall:7.3f}s] response.done received, continuing")
+
     if args.wait > 0:
         print(f"All messages sent. Waiting {args.wait}s for responses...")
         await asyncio.sleep(args.wait)
@@ -172,7 +180,7 @@ async def replay(args):
     return 0
 
 
-async def _print_responses(ws, args, outbound_log, server_audio_chunks, t0_wall):
+async def _print_responses(ws, args, outbound_log, server_audio_chunks, t0_wall, response_done_event):
     try:
         async for msg in ws:
             if msg.type == aiohttp.WSMsgType.TEXT:
@@ -189,6 +197,8 @@ async def _print_responses(ws, args, outbound_log, server_audio_chunks, t0_wall)
                     detail = f" {data.get('error', data.get('message', ''))}"
                 elif typ in ("response.audio_transcript.delta", "response.output_audio_transcript.delta"):
                     detail = f" {data.get('delta', '')!r}"
+                if typ == "response.done":
+                    response_done_event.set()
                 print(f"  <-  {typ}{detail}")
                 if args.dump_responses:
                     print(f"      {json.dumps(data)}")
@@ -202,10 +212,11 @@ async def _print_responses(ws, args, outbound_log, server_audio_chunks, t0_wall)
         pass
 
 
-_SESSION_DIR = os.path.dirname(__file__)
+_REPLAYS_DIR = os.path.join(os.path.dirname(__file__), "replays")
 _VAD_SESSIONS = {
-    "client": os.path.join(_SESSION_DIR, "livekit_session_client_vad.jsonl"),
-    "semantic": os.path.join(_SESSION_DIR, "livekit_session_semantic_vad.jsonl"),
+    "client": os.path.join(_REPLAYS_DIR, "livekit_session_client_vad.jsonl"),
+    "semantic": os.path.join(_REPLAYS_DIR, "livekit_session_semantic_vad.jsonl"),
+    "piper": os.path.join(_REPLAYS_DIR, "piper_tts_session.jsonl"),
 }
 
 
@@ -239,6 +250,8 @@ def main():
                         help="Override output_modalities (e.g. 'text' or 'audio')")
     parser.add_argument("--audio-out", default="/tmp/logs/replay_merged.wav",
                         help="Path to write merged stereo WAV (left=client, right=server)")
+    parser.add_argument("--wait-for-response", action="store_true",
+                        help="Wait for response.done before continuing after each response.create")
     args = parser.parse_args()
     if args.inbound_log is None:
         args.inbound_log = _VAD_SESSIONS[args.vad]
