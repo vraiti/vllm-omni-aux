@@ -84,6 +84,8 @@ def main():
     parser.add_argument("deploy_config", nargs="?", default=None)
     parser.add_argument("-i", action="store_true",
                         help="Interactive: attach to server stdio, no health polling")
+    parser.add_argument("--enforce-eager", action="store_true",
+                        help="Pass --enforce-eager through to vllm serve")
     args = parser.parse_args()
 
     model = resolve_model(args.model_key)
@@ -111,9 +113,9 @@ def main():
     print(f"Log file: {LOG_PATH}")
 
     vllm = os.path.join(VENV_DIR, "bin", "vllm")
-    serve_cmd = (
-        f'{vllm} serve --omni {model} --deploy {deploy_path} --enforce-eager'
-    )
+    serve_cmd = f'{vllm} serve --omni {model} --deploy {deploy_path}'
+    if args.enforce_eager:
+        serve_cmd += ' --enforce-eager'
     cmd = ["bash", "-c", f"{serve_cmd} 2>&1 | tee {LOG_PATH}"]
 
     if args.i:
