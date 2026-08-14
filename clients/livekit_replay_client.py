@@ -114,11 +114,12 @@ async def replay(args):
     server_audio_chunks = []
     response_done_event = asyncio.Event()
     response_done_event.set()
+    ttfa_state = {"turn": 0, "create_ts": None, "recorded": False, "results": []}
 
     outbound_log = open(args.outbound_log, "w")
     t0_capture = records[0]["ts"]
     t0_wall = time.monotonic()
-    recv_task = asyncio.create_task(_print_responses(ws, args, outbound_log, server_audio_chunks, t0_wall, response_done_event))
+    recv_task = asyncio.create_task(_print_responses(ws, args, outbound_log, server_audio_chunks, t0_wall, response_done_event, ttfa_state))
 
     for rec in records:
         if args.speed > 0:
@@ -153,6 +154,11 @@ async def replay(args):
         elapsed = time.monotonic() - t0_wall
         print(f"  [{elapsed:7.3f}s] -> {typ}{extra}")
 
+        if typ == "response.create":
+            ttfa_state["turn"] += 1
+            ttfa_state["create_ts"] = elapsed
+            ttfa_state["recorded"] = False
+
         await ws.send_str(json.dumps(msg))
 
         if args.wait_for_response and typ == "response.create":
@@ -177,10 +183,18 @@ async def replay(args):
         print(f"Wrote merged audio to {args.audio_out} "
               f"(client={len(client_buf)}B, server={len(server_buf)}B)")
 
+    if ttfa_state["results"]:
+        print("TTFA per turn:")
+        for turn, ttfa in ttfa_state["results"]:
+            if ttfa is None:
+                print(f"  Turn {turn}: no audio received")
+            else:
+                print(f"  Turn {turn}: {ttfa:.3f}s")
+
     return 0
 
 
-async def _print_responses(ws, args, outbound_log, server_audio_chunks, t0_wall, response_done_event):
+async def _print_responses(ws, args, outbound_log, server_audio_chunks, t0_wall, response_done_event, ttfa_state):
     try:
         async for msg in ws:
             if msg.type == aiohttp.WSMsgType.TEXT:
@@ -193,11 +207,19 @@ async def _print_responses(ws, args, outbound_log, server_audio_chunks, t0_wall,
                     if delta:
                         elapsed = time.monotonic() - t0_wall
                         server_audio_chunks.append((elapsed, base64.b64decode(delta)))
+                        if ttfa_state["create_ts"] is not None and not ttfa_state["recorded"]:
+                            ttfa_state["recorded"] = True
+                            ttfa_state["results"].append(
+                                (ttfa_state["turn"], elapsed - ttfa_state["create_ts"])
+                            )
                 elif typ == "error":
                     detail = f" {data.get('error', data.get('message', ''))}"
                 elif typ in ("response.audio_transcript.delta", "response.output_audio_transcript.delta"):
                     detail = f" {data.get('delta', '')!r}"
                 if typ == "response.done":
+                    if ttfa_state["create_ts"] is not None and not ttfa_state["recorded"]:
+                        ttfa_state["recorded"] = True
+                        ttfa_state["results"].append((ttfa_state["turn"], None))
                     response_done_event.set()
                 print(f"  <-  {typ}{detail}")
                 if args.dump_responses:
@@ -222,9 +244,9 @@ _VAD_SESSIONS = {
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--vad", choices=list(_VAD_SESSIONS), default="client",
+    parser.add_argument("--source", choices=list(_VAD_SESSIONS), default="client",
                         help="VAD mode session to replay (default: client)")
-    parser.add_argument("--inbound_log", help="Path to session JSONL (overrides --vad)")
+    parser.add_argument("--inbound_log", help="Path to session JSONL (overrides --source)")
     parser.add_argument("--host", default="localhost")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--model", default="Qwen/Qwen3-Omni-30B-A3B-Instruct")
@@ -254,7 +276,7 @@ def main():
                         help="Wait for response.done before continuing after each response.create")
     args = parser.parse_args()
     if args.inbound_log is None:
-        args.inbound_log = _VAD_SESSIONS[args.vad]
+        args.inbound_log = _VAD_SESSIONS[args.source]
 
     async def run():
         if args.timeout > 0:

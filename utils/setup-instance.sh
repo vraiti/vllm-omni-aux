@@ -20,10 +20,17 @@ git fetch fork
 git checkout "$BRANCH"
 
 echo "Cloning vllm..."
-git clone --single-branch --branch "$BRANCH" "$VLLM_FORK" /app/vllm
-cd /app/vllm
-git remote rename origin fork
-git remote add origin "$VLLM_ORIGIN"
+if git ls-remote --exit-code --heads "$VLLM_FORK" "$BRANCH" &>/dev/null; then
+    git clone --single-branch --branch "$BRANCH" "$VLLM_FORK" /app/vllm
+    cd /app/vllm
+    git remote rename origin fork
+    git remote add origin "$VLLM_ORIGIN"
+else
+    echo "Branch '$BRANCH' not found on vllm fork, falling back to origin/main"
+    git clone --single-branch --branch main "$VLLM_ORIGIN" /app/vllm
+    cd /app/vllm
+    git remote add fork "$VLLM_FORK"
+fi
 
 echo "Cloning vllm-omni-aux..."
 git clone "$VLLM_OMNI_AUX_ORIGIN" /app/vllm-omni-aux
@@ -48,14 +55,16 @@ if [[ -z "$FLASHINFER_VERSION" ]]; then
 fi
 
 CUDA_VERSION=$(nvcc --version | grep -oP 'release \K[0-9]+\.[0-9]+')
-CUDA_TAG=$(echo "$CUDA_VERSION" | tr -d '.')
-echo "Installing flashinfer-jit-cache==$FLASHINFER_VERSION (cu$CUDA_TAG)..."
+CUDA_MAJOR=$(echo "$CUDA_VERSION" | cut -d. -f1)
+CUDA_TAG="cu${CUDA_MAJOR}0"
+echo "Installing flashinfer-jit-cache==$FLASHINFER_VERSION ($CUDA_TAG)..."
 if ! uv pip install "flashinfer-jit-cache==$FLASHINFER_VERSION" \
-    --index-url "https://flashinfer.ai/whl/cu${CUDA_TAG}" 2>/dev/null; then
+    --index-url "https://flashinfer.ai/whl/${CUDA_TAG}" 2>/dev/null; then
     echo "flashinfer-jit-cache not available, skipping (may be bundled in flashinfer-python)."
 fi
 
 echo "Installing vllm-omni in dev mode..."
+cd /app/vllm-omni
 uv pip install setuptools-scm
 uv pip install -e . --no-build-isolation
 

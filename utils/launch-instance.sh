@@ -57,7 +57,14 @@ EOF
 
 bash "$SCRIPT_DIR/poll-ssh.sh" "$SSH_ALIAS"
 
-BRANCH=$(git -C "$SCRIPT_DIR/../../vllm-omni" branch --show-current)
+PROJECT_DIR="$PWD"
+while [[ "$PROJECT_DIR" != "$HOME/omni" && "$PROJECT_DIR" != "/" ]]; do
+    if [[ "$(dirname "$PROJECT_DIR")" == "$HOME/omni" ]]; then
+        break
+    fi
+    PROJECT_DIR="$(dirname "$PROJECT_DIR")"
+done
+BRANCH=$(git -C "$PROJECT_DIR/vllm-omni" branch --show-current)
 if [[ -z "$BRANCH" ]]; then
     echo "ERROR: could not determine current branch in vllm-omni" >&2
     exit 1
