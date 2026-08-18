@@ -25,6 +25,20 @@ MODEL_MAP = {
     "flux2": "black-forest-labs/FLUX.2-dev",
 }
 
+# Per-model default --tool-call-parser name, used unless --tool-call-parser
+# is given explicitly or --disable-tool-calling is passed.
+#
+# qwen3-omni -> "hermes", not "qwen3_xml": confirmed directly against this
+# model's own chat_template.json (HF cache), which renders tool calls as
+# plain JSON inside the tags --  <tool_call>\n{"name": .., "arguments": ..}\n</tool_call>
+# -- matching Hermes2ProToolParser's format exactly. qwen3_xml/Qwen3Parser
+# expects a different, nested <function=name><parameter=key>value</parameter></function>
+# encoding (see vllm/parser/qwen3.py's module docstring) that this model's
+# template does not produce.
+DEFAULT_TOOL_CALL_PARSER = {
+    "qwen3-omni": "hermes",
+}
+
 
 def kill_gpu_processes():
     result = subprocess.run(
@@ -86,6 +100,11 @@ def main():
                         help="Interactive: attach to server stdio, no health polling")
     parser.add_argument("--enforce-eager", action="store_true",
                         help="Pass --enforce-eager through to vllm serve")
+    parser.add_argument("--disable-tool-calling", action="store_true",
+                        help="Don't pass --enable-auto-tool-choice/--tool-call-parser through to vllm serve "
+                             "(tool calling is on by default when the model has a DEFAULT_TOOL_CALL_PARSER entry)")
+    parser.add_argument("--tool-call-parser", default=None,
+                        help="Override the tool-call parser name (defaults per model_key, see DEFAULT_TOOL_CALL_PARSER)")
     args = parser.parse_args()
 
     model = resolve_model(args.model_key)
@@ -116,6 +135,13 @@ def main():
     serve_cmd = f'{vllm} serve --omni {model} --deploy {deploy_path}'
     if args.enforce_eager:
         serve_cmd += ' --enforce-eager'
+    if not args.disable_tool_calling:
+        # On by default for any model with a DEFAULT_TOOL_CALL_PARSER entry
+        # (or an explicit --tool-call-parser override) -- silently skipped
+        # for models with neither, rather than failing the deploy.
+        tool_call_parser = args.tool_call_parser or DEFAULT_TOOL_CALL_PARSER.get(args.model_key)
+        if tool_call_parser:
+            serve_cmd += f' --enable-auto-tool-choice --tool-call-parser {tool_call_parser}'
     cmd = ["bash", "-c", f"{serve_cmd} 2>&1 | tee {LOG_PATH}"]
 
     if args.i:

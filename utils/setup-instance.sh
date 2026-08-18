@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BRANCH="${1:?Usage: $0 <branch>}"
+BRANCH_ARG="${1:?Usage: $0 <branch>[:remote_path]}"
+BRANCH="${BRANCH_ARG%%:*}"
+PROJECT_ROOT="/app"
+[[ "$BRANCH_ARG" == *:* ]] && PROJECT_ROOT="${BRANCH_ARG#*:}"
 
 VLLM_OMNI_ORIGIN="https://github.com/vllm-project/vllm-omni.git"
 VLLM_OMNI_FORK="https://github.com/vraiti/vllm-omni.git"
@@ -9,37 +12,37 @@ VLLM_ORIGIN="https://github.com/vllm-project/vllm.git"
 VLLM_FORK="https://github.com/vraiti/vllm.git"
 VLLM_OMNI_AUX_ORIGIN="https://github.com/vraiti/vllm-omni-aux.git"
 
-sudo mkdir -p /app
-sudo chown $USER:$USER /app
+sudo mkdir -p "$PROJECT_ROOT"
+sudo chown $USER:$USER "$PROJECT_ROOT"
 
 echo "Cloning vllm-omni..."
-git clone "$VLLM_OMNI_ORIGIN" /app/vllm-omni
-cd /app/vllm-omni
+git clone "$VLLM_OMNI_ORIGIN" "$PROJECT_ROOT"/vllm-omni
+cd "$PROJECT_ROOT"/vllm-omni
 git remote add fork "$VLLM_OMNI_FORK"
 git fetch fork
 git checkout "$BRANCH"
 
 echo "Cloning vllm..."
 if git ls-remote --exit-code --heads "$VLLM_FORK" "$BRANCH" &>/dev/null; then
-    git clone --single-branch --branch "$BRANCH" "$VLLM_FORK" /app/vllm
-    cd /app/vllm
+    git clone --single-branch --branch "$BRANCH" "$VLLM_FORK" "$PROJECT_ROOT"/vllm
+    cd "$PROJECT_ROOT"/vllm
     git remote rename origin fork
     git remote add origin "$VLLM_ORIGIN"
 else
     echo "Branch '$BRANCH' not found on vllm fork, falling back to origin/main"
-    git clone --single-branch --branch main "$VLLM_ORIGIN" /app/vllm
-    cd /app/vllm
+    git clone --single-branch --branch main "$VLLM_ORIGIN" "$PROJECT_ROOT"/vllm
+    cd "$PROJECT_ROOT"/vllm
     git remote add fork "$VLLM_FORK"
 fi
 
 echo "Cloning vllm-omni-aux..."
-git clone "$VLLM_OMNI_AUX_ORIGIN" /app/vllm-omni-aux
+git clone "$VLLM_OMNI_AUX_ORIGIN" "$PROJECT_ROOT"/vllm-omni-aux
 
 echo "Creating venv..."
-uv venv /app/venv
-source /app/venv/bin/activate
+uv venv "$PROJECT_ROOT"/venv
+source "$PROJECT_ROOT"/venv/bin/activate
 
-VLLM_VERSION=$(grep -oP 'VLLM_VERSION[= ]+v?\K[0-9]+\.[0-9]+\.[0-9]+' /app/vllm-omni/docker/Dockerfile.xpu | head -1)
+VLLM_VERSION=$(grep -oP 'VLLM_VERSION[= ]+v?\K[0-9]+\.[0-9]+\.[0-9]+' "$PROJECT_ROOT"/vllm-omni/docker/Dockerfile.xpu | head -1)
 if [[ -z "$VLLM_VERSION" ]]; then
     echo "ERROR: could not determine VLLM_VERSION from docker/Dockerfile.xpu" >&2
     exit 1
@@ -64,7 +67,7 @@ if ! uv pip install "flashinfer-jit-cache==$FLASHINFER_VERSION" \
 fi
 
 echo "Installing vllm-omni in dev mode..."
-cd /app/vllm-omni
+cd "$PROJECT_ROOT"/vllm-omni
 uv pip install setuptools-scm
 uv pip install -e . --no-build-isolation
 
