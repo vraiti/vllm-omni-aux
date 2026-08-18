@@ -10,9 +10,13 @@ import urllib.error
 
 from pathlib import Path
 
-VLLM_OMNI_DIR = "/app/vllm-omni"
-VLLM_OMNI_AUX_DIR = "/app/vllm-omni-aux"
-VENV_DIR = "/app/venv"
+# Derived from this script's own location rather than hardcoded to /app, so
+# this works unchanged on a project root synced elsewhere (e.g. run via
+# run-remote-rsync.sh's `alias:remote_path` form onto a non-/app host).
+VLLM_OMNI_AUX_DIR = str(Path(__file__).resolve().parent.parent)
+PROJECT_ROOT = str(Path(VLLM_OMNI_AUX_DIR).parent)
+VLLM_OMNI_DIR = os.path.join(PROJECT_ROOT, "vllm-omni")
+VENV_DIR = os.path.join(PROJECT_ROOT, "venv")
 DEPLOY_CONFIGS_DIR = os.path.join(VLLM_OMNI_AUX_DIR, "deploy-configs")
 LOG_DIR = "/tmp/logs"
 LOG_PATH = os.path.join(LOG_DIR, time.strftime("vllm-%d%m%Y-%H%M%S.log"))
