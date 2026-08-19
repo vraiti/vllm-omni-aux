@@ -9,9 +9,9 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 VENV_DIR="$PROJECT_ROOT/venv"
 VLLM_OMNI_DIR="$PROJECT_ROOT/vllm-omni"
 
-if ! "$VENV_DIR/bin/python3" -c "import pytest, pytest_mock" 2>/dev/null; then
-    echo "Installing pytest/pytest-mock into $VENV_DIR ..."
-    "$HOME/.local/bin/uv" pip install --python "$VENV_DIR/bin/python3" pytest pytest-mock
+if ! "$VENV_DIR/bin/python3" -c "import pytest, pytest_mock, pytest_asyncio" 2>/dev/null; then
+    echo "Installing pytest/pytest-mock/pytest-asyncio into $VENV_DIR ..."
+    "$HOME/.local/bin/uv" pip install --python "$VENV_DIR/bin/python3" pytest pytest-mock pytest-asyncio
 fi
 
 cd "$VLLM_OMNI_DIR/tests"
