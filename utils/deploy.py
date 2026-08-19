@@ -161,33 +161,43 @@ def main():
     # terminal being drained; use `tail -f` on LOG_PATH for live output.
     log_fh = open(LOG_PATH, "a")
 
-    if args.i:
-        proc = subprocess.Popen(cmd, env=env, stdout=log_fh, stderr=subprocess.STDOUT)
-        try:
-            return proc.wait()
-        except KeyboardInterrupt:
-            proc.terminate()
-            proc.wait()
-            return 130
+    # tail -f follows the file independently of vllm serve's own writes --
+    # its stdout is deploy.py's own (inherited, unredirected), so a stalled
+    # terminal on this end only ever blocks `tail`, never the server. This
+    # restores the old live-output UX without recreating the tee-to-a-live-
+    # terminal dependency that caused the deadlock in the first place.
+    tail_proc = subprocess.Popen(["tail", "-f", LOG_PATH])
 
-    proc = subprocess.Popen(cmd, start_new_session=True, env=env, stdout=log_fh, stderr=subprocess.STDOUT)
+    try:
+        if args.i:
+            proc = subprocess.Popen(cmd, env=env, stdout=log_fh, stderr=subprocess.STDOUT)
+            try:
+                return proc.wait()
+            except KeyboardInterrupt:
+                proc.terminate()
+                proc.wait()
+                return 130
 
-    while True:
-        time.sleep(POLL_INTERVAL)
+        proc = subprocess.Popen(cmd, start_new_session=True, env=env, stdout=log_fh, stderr=subprocess.STDOUT)
 
-        if proc.poll() is not None:
-            print(f"vllm process died with exit code {proc.returncode}", file=sys.stderr)
-            print(f"Log file: {LOG_PATH}", file=sys.stderr)
-            return 1
+        while True:
+            time.sleep(POLL_INTERVAL)
 
-        try:
-            resp = urllib.request.urlopen(HEALTH_URL, timeout=5)
-            if resp.status == 200:
-                print(f"Health check passed. Server is ready.")
-                print(f"Log file: {LOG_PATH}")
-                return 0
-        except (urllib.error.URLError, OSError):
-            pass
+            if proc.poll() is not None:
+                print(f"vllm process died with exit code {proc.returncode}", file=sys.stderr)
+                print(f"Log file: {LOG_PATH}", file=sys.stderr)
+                return 1
+
+            try:
+                resp = urllib.request.urlopen(HEALTH_URL, timeout=5)
+                if resp.status == 200:
+                    print(f"Health check passed. Server is ready.")
+                    print(f"Log file: {LOG_PATH}")
+                    return 0
+            except (urllib.error.URLError, OSError):
+                pass
+    finally:
+        tail_proc.terminate()
 
 
 if __name__ == "__main__":
