@@ -1,4 +1,28 @@
-# MiniCPM-o 4.5 three-stage deploy on one large-memory GPU.
+# MiniCPM-o 4.5 /v1/realtime full-duplex deploy on one large-memory GPU.
+# MiniCPM-o is always run in full-duplex mode here -- there is no separate
+# offline/benchmark variant of this config.
+#
+# Notable choices, relative to a naively-greedy offline-benchmark config:
+#   * default_sampling_params on stage 0 (thinker) use the reference
+#     streaming_generate's own duplex decode defaults (temperature=0.7,
+#     top_p=0.8, top_k=20, text_repetition_penalty=1.05 -> repetition_penalty)
+#     instead of greedy (temperature=0.0, top_k=-1) -- greedy decoding makes
+#     a live conversational duplex session degenerate/repetitive.
+#   * logits_processors registers MiniCPMOChunkEosForceLogitsProcessor,
+#     which forces <|chunk_eos|> once a chunk's freely-sampled tokens hit
+#     the reference's max_new_speak_tokens_per_chunk=20 cap; without it a
+#     misbehaving generation could run past its ~1s chunk budget and never
+#     yield back for the next audio chunk. See connection.py's
+#     MINICPMO_MAX_NEW_TOKENS_PER_CHUNK / _run_streaming_session.
+#   * stage 0's max_tokens is set high (32768), not the ~2048 a short-turn
+#     benchmark config would use: this
+#     SamplingParams field counts *all* generated tokens over the entire
+#     persistent /v1/realtime streaming request's lifetime (potentially a
+#     long-running conversation, not one short turn), so a small cap would
+#     hit FINISHED_LENGTH_CAPPED and permanently end the session partway
+#     through a real call. Set to a large, comfortably-below-context-window
+#     value here; the model's own max_model_len is still the real ceiling
+#     vLLM enforces underneath this.
 pipeline: minicpmo_4_5
 async_chunk: true
 
@@ -23,20 +47,21 @@ stages:
     tensor_parallel_size: 1
     max_num_batched_tokens: 16384
     devices: "0"
+    logits_processors:
+      - "vllm_omni.model_executor.models.minicpmo_4_5.chunk_eos_logits_processor:MiniCPMOChunkEosForceLogitsProcessor"
     limit_mm_per_prompt:
       # Daily-Omni MiniCPM pack: up to 64 interleaved image/audio pairs (1fps).
       image: 64
       audio: 64
       video: 1
     default_sampling_params:
-      temperature: 0.0
-      top_p: 1.0
-      top_k: -1
-      max_tokens: 2048
+      temperature: 0.7
+      top_p: 0.8
+      top_k: 20
+      max_tokens: 32768
       seed: 42
       detokenize: true
-      # 1.0 for MCQ accuracy; 1.1 can bias short A–D answers.
-      repetition_penalty: 1.0
+      repetition_penalty: 1.05
 
   - stage_id: 1
     max_num_seqs: 4

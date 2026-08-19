@@ -89,8 +89,6 @@ while IFS= read -r entry || [[ -n "$entry" ]]; do
 
     echo "Syncing $repo_name..."
     rsync -az --delete \
-        --filter=':- .gitignore' \
-        --exclude='.git' \
         "$repo_dir/" "$SSH_ALIAS:$REMOTE_ROOT/$repo_name/"
 done < "$REPOS_FILE"
 
