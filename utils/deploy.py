@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import os
+import shlex
 import signal
 import subprocess
 import sys
@@ -133,7 +134,7 @@ def main():
     except FileNotFoundError:
         pass
     os.link(LOG_PATH, stable_log)
-    print(f"Log file: {LOG_PATH}")
+    print(f"Log file: {LOG_PATH} (tail -f to follow live)")
 
     vllm = os.path.join(VENV_DIR, "bin", "vllm")
     serve_cmd = f'{vllm} serve --omni {model} --deploy {deploy_path}'
@@ -146,10 +147,22 @@ def main():
         tool_call_parser = args.tool_call_parser or DEFAULT_TOOL_CALL_PARSER.get(args.model_key)
         if tool_call_parser:
             serve_cmd += f' --enable-auto-tool-choice --tool-call-parser {tool_call_parser}'
-    cmd = ["bash", "-c", f"{serve_cmd} 2>&1 | tee {LOG_PATH}"]
+    cmd = shlex.split(serve_cmd)
+
+    # Redirect straight to the log file rather than `... | tee LOG_PATH`:
+    # tee's stdout inherits whatever pty this script itself is attached to
+    # (e.g. an `ssh -tt` session), and start_new_session=True below doesn't
+    # change that -- so if that terminal ever stalls (flow control, a slow
+    # SSH client, anything), tee's write() blocks, backing up the pipe into
+    # vllm serve's own stdout write, which freezes the *entire* asyncio
+    # event loop the instant it next tries to log anything (confirmed via
+    # py-spy: the whole server hung inside logging's blocking flush()).
+    # Writing directly to a local file has no such dependency on a live
+    # terminal being drained; use `tail -f` on LOG_PATH for live output.
+    log_fh = open(LOG_PATH, "a")
 
     if args.i:
-        proc = subprocess.Popen(cmd, env=env)
+        proc = subprocess.Popen(cmd, env=env, stdout=log_fh, stderr=subprocess.STDOUT)
         try:
             return proc.wait()
         except KeyboardInterrupt:
@@ -157,7 +170,7 @@ def main():
             proc.wait()
             return 130
 
-    proc = subprocess.Popen(cmd, start_new_session=True, env=env)
+    proc = subprocess.Popen(cmd, start_new_session=True, env=env, stdout=log_fh, stderr=subprocess.STDOUT)
 
     while True:
         time.sleep(POLL_INTERVAL)
