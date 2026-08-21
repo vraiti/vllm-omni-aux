@@ -45,6 +45,32 @@ DEFAULT_TOOL_CALL_PARSER = {
 }
 
 
+def kill_vllm_serve_processes():
+    # nvidia-smi's compute-apps list (kill_gpu_processes, below) only covers
+    # processes holding an active CUDA context -- the top-level `vllm serve`
+    # APIServer process just orchestrates the per-stage worker subprocesses
+    # that actually touch the GPU, so it doesn't appear there. If those
+    # workers already died (crash, previous kill_gpu_processes() run) while
+    # the APIServer parent lingered, it keeps the HTTP port bound with
+    # nothing left for kill_gpu_processes() to find, and the next deploy
+    # fails with "Address already in use". Kill any `vllm serve` process by
+    # command line directly to close that gap.
+    result = subprocess.run(
+        ["pgrep", "-f", "vllm serve"],
+        capture_output=True, text=True,
+    )
+    pids = {int(line.strip()) for line in result.stdout.splitlines() if line.strip()}
+    if not pids:
+        print("No lingering vllm serve processes.")
+        return
+    for pid in pids:
+        print(f"Killing lingering vllm serve process {pid}...")
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+
 def kill_gpu_processes():
     result = subprocess.run(
         ["nvidia-smi", "--query-compute-apps=pid", "--format=csv,noheader,nounits"],
@@ -120,6 +146,7 @@ def main():
         with open(hf_token_path) as f:
             os.environ["HF_TOKEN"] = f.read().strip()
 
+    kill_vllm_serve_processes()
     kill_gpu_processes()
 
     env = os.environ.copy()
