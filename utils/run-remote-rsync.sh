@@ -105,5 +105,7 @@ elif [[ ${#MATCHES[@]} -gt 1 ]]; then
     exit 1
 fi
 
+ssh "$SSH_ALIAS" "mkdir -p /opt/dlami/nvme/huggingface; mkdir -p /opt/dlami/nvme/uv"
+
 HF_TOKEN=$(cat ~/.secret/hf)
 ssh -tt "$SSH_ALIAS" HF_TOKEN="$HF_TOKEN" "$REMOTE_CMD" "$@"
