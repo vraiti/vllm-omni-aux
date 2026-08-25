@@ -152,24 +152,19 @@ for arg in "$@"; do
     REMOTE_SHELL_CMD+="$(printf ' %q' "$arg")"
 done
 
-# Run the job in a DETACHED tmux session (never attached to) so a dropped
-# network connection can't kill it, redirected to a remote log file. Watching
-# it is a completely separate, plain (non-tmux) `ssh -tt ... tail -f` -- if
-# we instead attached to the tmux session directly (`tmux attach`), ssh -tt
-# would be driving tmux as an interactive client, which draws its own status
-# bar and uses alternate-screen mode, cluttering the terminal with tmux's own
-# control codes instead of showing clean log output. Decoupling "keep the job
-# alive" (detached tmux) from "show me the log" (plain tail) avoids that, and
-# a reconnect just re-runs the watcher -- the job's tmux session is unaffected.
-SESSION_NAME="rrr-$$-$(date +%s)"
-EXIT_FILE="/tmp/.rrr_exit_${SESSION_NAME}"
+# Run the job with `nohup ... &` so it survives a dropped network connection
+# (nohup ignores the SIGHUP the shell would otherwise send it on disconnect;
+# `disown` also drops it from the shell's job table so the shell exiting
+# doesn't touch it either), redirected to a remote log file. Watching it is a
+# separate, plain `ssh -tt ... tail -f` -- a reconnect just re-runs the
+# watcher, it doesn't touch the already-running job.
+EXIT_FILE="/tmp/.rrr_exit_$$_$(date +%s)"
 REMOTE_LOG="/tmp/logs/rrr.log"
 
 REMOTE_SHELL_CMD+="$(printf '; echo $? > %q' "$EXIT_FILE")"
 LAUNCHER_CMD="$(printf 'mkdir -p %q; : > %q; ( %s ) > %q 2>&1 < /dev/null' \
     "$(dirname "$REMOTE_LOG")" "$REMOTE_LOG" "$REMOTE_SHELL_CMD" "$REMOTE_LOG")"
-START_CMD="$(printf 'tmux has-session -t %q 2>/dev/null || tmux new-session -d -s %q %q' \
-    "$SESSION_NAME" "$SESSION_NAME" "$LAUNCHER_CMD")"
+START_CMD="$(printf 'nohup bash -c %q > /dev/null 2>&1 < /dev/null & disown' "$LAUNCHER_CMD")"
 ssh "$SSH_ALIAS" "$START_CMD"
 
 WATCH_CMD="$(printf 'tail -n +1 -f %q & TPID=$!; while [ ! -f %q ]; do sleep 0.5; done; sleep 0.2; kill $TPID 2>/dev/null; wait $TPID 2>/dev/null' \
