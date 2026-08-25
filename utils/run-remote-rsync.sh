@@ -153,22 +153,29 @@ for arg in "$@"; do
 done
 
 # Run inside a tmux session so a dropped network connection doesn't kill the
-# remote job: `tmux new-session -A` creates the session (and runs the command)
-# the first time, but on a reconnect it just re-attaches to the still-running
-# session instead of restarting the command. The exit-code file is how we
-# know the job actually finished (vs. the ssh connection merely dropping),
-# since tmux's own exit status here reflects the *attach*, not the job.
+# remote job. The job itself runs backgrounded on the remote, redirected to
+# a remote log file; the tmux pane's foreground process is `tail -f` on that
+# log (stopping automatically once the job's PID exits via --pid), not the
+# job itself. That way, when the job finishes, its output stays behind in
+# the remote log file and in the pane's scrollback -- it isn't lost to a
+# tmux session/pane that exits and disappears the moment the job does.
+# `tmux new-session -A` creates the session (and launches the job + tail)
+# the first time; on a reconnect it just re-attaches to the still-running
+# tail instead of restarting the job. The exit-code file is how we know the
+# job actually finished (vs. the ssh connection merely dropping), since
+# tmux's own exit status here reflects the *attach*, not the job.
 SESSION_NAME="rrr-$$-$(date +%s)"
 EXIT_FILE="/tmp/.rrr_exit_${SESSION_NAME}"
-REMOTE_SHELL_CMD+="$(printf '; echo $? > %q' "$EXIT_FILE")"
-TMUX_CMD="$(printf 'tmux new-session -A -s %q %q' "$SESSION_NAME" "$REMOTE_SHELL_CMD")"
+REMOTE_LOG="/tmp/logs/rrr.log"
 
-LOG_FILE="/tmp/logs/rrr.log"
-mkdir -p "$(dirname "$LOG_FILE")"
+REMOTE_SHELL_CMD+="$(printf '; echo $? > %q' "$EXIT_FILE")"
+LAUNCHER_CMD="$(printf 'mkdir -p %q && : > %q && ( %s ) > %q 2>&1 < /dev/null & JOB_PID=$!; tail -n +1 -f --pid=$JOB_PID %q; wait $JOB_PID' \
+    "$(dirname "$REMOTE_LOG")" "$REMOTE_LOG" "$REMOTE_SHELL_CMD" "$REMOTE_LOG" "$REMOTE_LOG")"
+TMUX_CMD="$(printf 'tmux new-session -A -s %q %q' "$SESSION_NAME" "$LAUNCHER_CMD")"
 
 while true; do
-    ssh -tt "$SSH_ALIAS" "$TMUX_CMD" 2>&1 | tee -a "$LOG_FILE"
-    ssh_status="${PIPESTATUS[0]}"
+    ssh -tt "$SSH_ALIAS" "$TMUX_CMD"
+    ssh_status=$?
     [[ "$ssh_status" -eq 0 ]] && break
     if ssh "$SSH_ALIAS" "test -f $(printf '%q' "$EXIT_FILE")" 2>/dev/null; then
         break
