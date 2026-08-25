@@ -152,31 +152,31 @@ for arg in "$@"; do
     REMOTE_SHELL_CMD+="$(printf ' %q' "$arg")"
 done
 
-# Run inside a tmux session so a dropped network connection doesn't kill the
-# remote job. The job itself runs backgrounded on the remote, redirected to
-# a remote log file; the tmux pane's foreground process is `tail -f` on that
-# log (stopping automatically once the job's PID exits via --pid), not the
-# job itself. That way, when the job finishes, its output stays behind in
-# the remote log file and in the pane's scrollback -- it isn't lost to a
-# tmux session/pane that exits and disappears the moment the job does.
-# `tmux new-session -A` creates the session (and launches the job + tail)
-# the first time; on a reconnect it just re-attaches to the still-running
-# tail instead of restarting the job. The exit-code file is how we know the
-# job actually finished (vs. the ssh connection merely dropping), since
-# tmux's own exit status here reflects the *attach*, not the job.
+# Run the job in a DETACHED tmux session (never attached to) so a dropped
+# network connection can't kill it, redirected to a remote log file. Watching
+# it is a completely separate, plain (non-tmux) `ssh -tt ... tail -f` -- if
+# we instead attached to the tmux session directly (`tmux attach`), ssh -tt
+# would be driving tmux as an interactive client, which draws its own status
+# bar and uses alternate-screen mode, cluttering the terminal with tmux's own
+# control codes instead of showing clean log output. Decoupling "keep the job
+# alive" (detached tmux) from "show me the log" (plain tail) avoids that, and
+# a reconnect just re-runs the watcher -- the job's tmux session is unaffected.
 SESSION_NAME="rrr-$$-$(date +%s)"
 EXIT_FILE="/tmp/.rrr_exit_${SESSION_NAME}"
 REMOTE_LOG="/tmp/logs/rrr.log"
 
 REMOTE_SHELL_CMD+="$(printf '; echo $? > %q' "$EXIT_FILE")"
-LAUNCHER_CMD="$(printf 'mkdir -p %q; : > %q; ( %s ) > %q 2>&1 < /dev/null & JOB_PID=$!; tail -n +1 -f --pid=$JOB_PID %q; wait $JOB_PID' \
-    "$(dirname "$REMOTE_LOG")" "$REMOTE_LOG" "$REMOTE_SHELL_CMD" "$REMOTE_LOG" "$REMOTE_LOG")"
-TMUX_CMD="$(printf 'tmux new-session -A -s %q %q' "$SESSION_NAME" "$LAUNCHER_CMD")"
+LAUNCHER_CMD="$(printf 'mkdir -p %q; : > %q; ( %s ) > %q 2>&1 < /dev/null' \
+    "$(dirname "$REMOTE_LOG")" "$REMOTE_LOG" "$REMOTE_SHELL_CMD" "$REMOTE_LOG")"
+START_CMD="$(printf 'tmux has-session -t %q 2>/dev/null || tmux new-session -d -s %q %q' \
+    "$SESSION_NAME" "$SESSION_NAME" "$LAUNCHER_CMD")"
+ssh "$SSH_ALIAS" "$START_CMD"
+
+WATCH_CMD="$(printf 'tail -n +1 -f %q & TPID=$!; while [ ! -f %q ]; do sleep 0.5; done; sleep 0.2; kill $TPID 2>/dev/null; wait $TPID 2>/dev/null' \
+    "$REMOTE_LOG" "$EXIT_FILE")"
 
 while true; do
-    ssh -tt "$SSH_ALIAS" "$TMUX_CMD"
-    ssh_status=$?
-    [[ "$ssh_status" -eq 0 ]] && break
+    ssh -tt "$SSH_ALIAS" "$WATCH_CMD"
     if ssh "$SSH_ALIAS" "test -f $(printf '%q' "$EXIT_FILE")" 2>/dev/null; then
         break
     fi
