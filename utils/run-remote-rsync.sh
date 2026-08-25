@@ -79,7 +79,10 @@ fi
 # is needed).
 remote_non_editable_site_packages_dir() {
     local repo_name="$1"
-    ssh "$SSH_ALIAS" "'$REMOTE_ROOT/venv/bin/python3'" "'$REMOTE_ROOT/vllm-omni-aux/utils/remote_non_editable_site_packages_dir.py'" "'$repo_name'" 2>/dev/null
+    # -n: this runs inside a `while read < "$REPOS_FILE"` loop, and ssh
+    # without -n consumes the loop's remaining stdin (the rest of the repos
+    # file), silently truncating the loop to just this one entry.
+    ssh -n "$SSH_ALIAS" "'$REMOTE_ROOT/venv/bin/python3'" "'$REMOTE_ROOT/vllm-omni-aux/utils/remote_non_editable_site_packages_dir.py'" "'$repo_name'" 2>/dev/null
 }
 
 while IFS= read -r entry || [[ -n "$entry" ]]; do
