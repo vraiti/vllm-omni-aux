@@ -147,9 +147,31 @@ HF_TOKEN=$(cat ~/.secret/hf)
 # than passing activate/exec/env as separate ssh arguments -- an env-var
 # prefix (VAR=val cmd1 && cmd2) only applies to cmd1, not cmd2, so HF_TOKEN
 # must be `export`ed inside the string, not passed as a leading ssh arg.
-REMOTE_SHELL_CMD="$(printf 'export HF_TOKEN=%q; source %q/venv/bin/activate && exec %q' "$HF_TOKEN" "$REMOTE_ROOT" "$REMOTE_CMD")"
+REMOTE_SHELL_CMD="$(printf 'export HF_TOKEN=%q; source %q/venv/bin/activate && %q' "$HF_TOKEN" "$REMOTE_ROOT" "$REMOTE_CMD")"
 for arg in "$@"; do
     REMOTE_SHELL_CMD+="$(printf ' %q' "$arg")"
 done
 
-ssh -tt "$SSH_ALIAS" "$REMOTE_SHELL_CMD"
+# Run inside a tmux session so a dropped network connection doesn't kill the
+# remote job: `tmux new-session -A` creates the session (and runs the command)
+# the first time, but on a reconnect it just re-attaches to the still-running
+# session instead of restarting the command. The exit-code file is how we
+# know the job actually finished (vs. the ssh connection merely dropping),
+# since tmux's own exit status here reflects the *attach*, not the job.
+SESSION_NAME="rrr-$$-$(date +%s)"
+EXIT_FILE="/tmp/.rrr_exit_${SESSION_NAME}"
+REMOTE_SHELL_CMD+="$(printf '; echo $? > %q' "$EXIT_FILE")"
+TMUX_CMD="$(printf 'tmux new-session -A -s %q %q' "$SESSION_NAME" "$REMOTE_SHELL_CMD")"
+
+while true; do
+    ssh -tt "$SSH_ALIAS" "$TMUX_CMD" && break
+    if ssh "$SSH_ALIAS" "test -f $(printf '%q' "$EXIT_FILE")" 2>/dev/null; then
+        break
+    fi
+    echo "Connection to $SSH_ALIAS dropped, reconnecting in 5s..." >&2
+    sleep 5
+done
+
+EXIT_CODE="$(ssh "$SSH_ALIAS" "cat $(printf '%q' "$EXIT_FILE") 2>/dev/null")"
+ssh "$SSH_ALIAS" "rm -f $(printf '%q' "$EXIT_FILE")" 2>/dev/null
+exit "${EXIT_CODE:-1}"
