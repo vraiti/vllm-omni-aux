@@ -169,7 +169,7 @@ EXIT_FILE="/tmp/.rrr_exit_${SESSION_NAME}"
 REMOTE_LOG="/tmp/logs/rrr.log"
 
 REMOTE_SHELL_CMD+="$(printf '; echo $? > %q' "$EXIT_FILE")"
-LAUNCHER_CMD="$(printf 'mkdir -p %q && : > %q && ( %s ) > %q 2>&1 < /dev/null & JOB_PID=$!; tail -n +1 -f --pid=$JOB_PID %q; wait $JOB_PID' \
+LAUNCHER_CMD="$(printf 'mkdir -p %q; : > %q; ( %s ) > %q 2>&1 < /dev/null & JOB_PID=$!; tail -n +1 -f --pid=$JOB_PID %q; wait $JOB_PID' \
     "$(dirname "$REMOTE_LOG")" "$REMOTE_LOG" "$REMOTE_SHELL_CMD" "$REMOTE_LOG" "$REMOTE_LOG")"
 TMUX_CMD="$(printf 'tmux new-session -A -s %q %q' "$SESSION_NAME" "$LAUNCHER_CMD")"
 
