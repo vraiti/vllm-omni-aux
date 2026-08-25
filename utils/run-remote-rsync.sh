@@ -141,4 +141,15 @@ fi
 ssh "$SSH_ALIAS" "mkdir -p /opt/dlami/nvme/huggingface; mkdir -p /opt/dlami/nvme/uv"
 
 HF_TOKEN=$(cat ~/.secret/hf)
-ssh -tt "$SSH_ALIAS" HF_TOKEN="$HF_TOKEN" "$REMOTE_CMD" "$@"
+
+# ssh flattens all trailing arguments into a single string and reparses it
+# remotely, so build one shell-safe command string (with printf %q) rather
+# than passing activate/exec/env as separate ssh arguments -- an env-var
+# prefix (VAR=val cmd1 && cmd2) only applies to cmd1, not cmd2, so HF_TOKEN
+# must be `export`ed inside the string, not passed as a leading ssh arg.
+REMOTE_SHELL_CMD="$(printf 'export HF_TOKEN=%q; source %q/venv/bin/activate && exec %q' "$HF_TOKEN" "$REMOTE_ROOT" "$REMOTE_CMD")"
+for arg in "$@"; do
+    REMOTE_SHELL_CMD+="$(printf ' %q' "$arg")"
+done
+
+ssh -tt "$SSH_ALIAS" "$REMOTE_SHELL_CMD"
