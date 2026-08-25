@@ -10,9 +10,14 @@ VENV_PYTHON="/app/venv/bin/python3"
 
 cd "$REPO_DIR"
 
-timeout 1800 "$VENV_PYTHON" -m pytest tests \
-    -k "minicpmo or minicpm" \
-    --ignore=tests/e2e \
-    --ignore=tests/examples \
-    --ignore=tests/dfx/perf \
-    -v
+# Target only MiniCPM-o test paths directly instead of collecting the whole
+# suite with -k: collecting everything pulls in unrelated modules (e.g.
+# diffusion/hunyuan_image3) whose import errors abort the entire pytest
+# session before any MiniCPM-o test gets to run.
+mapfile -t TEST_PATHS < <(
+    find tests -iname "*minicpm*" \
+        \( -path "*/e2e/*" -o -path "*/examples/*" -o -path "*/dfx/perf/*" -o -path "tests/assets/*" \) -prune -o \
+        -iname "*minicpm*" -print
+)
+
+timeout 1800 "$VENV_PYTHON" -m pytest "${TEST_PATHS[@]}" -v
