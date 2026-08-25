@@ -10,7 +10,7 @@ VENV_PYTHON="/app/venv/bin/python3"
 
 cd "$REPO_DIR"
 
-"$VENV_PYTHON" -m pytest tests \
+timeout 1800 "$VENV_PYTHON" -m pytest tests \
     -k "minicpmo or minicpm" \
     --ignore=tests/e2e \
     --ignore=tests/examples \
