@@ -163,8 +163,13 @@ EXIT_FILE="/tmp/.rrr_exit_${SESSION_NAME}"
 REMOTE_SHELL_CMD+="$(printf '; echo $? > %q' "$EXIT_FILE")"
 TMUX_CMD="$(printf 'tmux new-session -A -s %q %q' "$SESSION_NAME" "$REMOTE_SHELL_CMD")"
 
+LOG_FILE="/tmp/logs/rrr.log"
+mkdir -p "$(dirname "$LOG_FILE")"
+
 while true; do
-    ssh -tt "$SSH_ALIAS" "$TMUX_CMD" && break
+    ssh -tt "$SSH_ALIAS" "$TMUX_CMD" 2>&1 | tee -a "$LOG_FILE"
+    ssh_status="${PIPESTATUS[0]}"
+    [[ "$ssh_status" -eq 0 ]] && break
     if ssh "$SSH_ALIAS" "test -f $(printf '%q' "$EXIT_FILE")" 2>/dev/null; then
         break
     fi
