@@ -69,22 +69,6 @@ if [[ ! -f "$REPOS_FILE" ]]; then
     exit 1
 fi
 
-# Detect a repo installed as a NON-editable package in $REMOTE_ROOT/venv and
-# print its site-packages directory. A non-editable install is a real copy
-# under site-packages, so a plain source-tree rsync to $REMOTE_ROOT/$repo_name
-# (e.g. /app/vllm/) never reaches the code Python actually imports -- e.g.
-# vllm pip-installed as a stock wheel instead of `pip install -e`. Prints
-# nothing when the package isn't installed, or is installed editable
-# (editable installs already point at the synced source tree, so no overlay
-# is needed).
-remote_non_editable_site_packages_dir() {
-    local repo_name="$1"
-    # -n: this runs inside a `while read < "$REPOS_FILE"` loop, and ssh
-    # without -n consumes the loop's remaining stdin (the rest of the repos
-    # file), silently truncating the loop to just this one entry.
-    ssh -n "$SSH_ALIAS" "'$REMOTE_ROOT/venv/bin/python3'" "'$REMOTE_ROOT/vllm-omni-aux/utils/remote_non_editable_site_packages_dir.py'" "'$repo_name'" 2>/dev/null
-}
-
 while IFS= read -r entry || [[ -n "$entry" ]]; do
     entry="${entry%%#*}"
     entry="${entry// /}"
@@ -106,23 +90,6 @@ while IFS= read -r entry || [[ -n "$entry" ]]; do
     echo "Syncing $repo_name..."
     rsync -az --delete \
         "$repo_dir/" "$SSH_ALIAS:$REMOTE_ROOT/$repo_name/"
-
-    site_packages_dir="$(remote_non_editable_site_packages_dir "$repo_name")"
-    if [[ -n "$site_packages_dir" ]]; then
-        # The installed package is a subdirectory of the repo (e.g.
-        # vllm/vllm/*.py, not vllm/*.py at the repo root) -- sync from that
-        # subdirectory, named after the site-packages target, not the repo root.
-        pkg_basename="$(basename "$site_packages_dir")"
-        pkg_source_dir="$repo_dir/$pkg_basename"
-        if [[ ! -d "$pkg_source_dir" ]]; then
-            echo "  WARNING: $repo_name looks non-editable in $REMOTE_ROOT/venv but $pkg_source_dir does not exist locally; skipping overlay" >&2
-        else
-            echo "  $repo_name is installed non-editable in $REMOTE_ROOT/venv; overlaying .py files onto $site_packages_dir/"
-            rsync -az --prune-empty-dirs \
-                --include='*/' --include='*.py' --exclude='*' \
-                "$pkg_source_dir/" "$SSH_ALIAS:$site_packages_dir/"
-        fi
-    fi
 done < "$REPOS_FILE"
 
 AUX_DIR="$PROJECT_DIR/vllm-omni-aux"
