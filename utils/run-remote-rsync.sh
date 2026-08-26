@@ -131,14 +131,26 @@ REMOTE_LOG="/tmp/logs/rrr.log"
 REMOTE_SHELL_CMD+="$(printf '; echo $? > %q' "$EXIT_FILE")"
 LAUNCHER_CMD="$(printf 'mkdir -p %q; : > %q; ( %s ) > %q 2>&1 < /dev/null' \
     "$(dirname "$REMOTE_LOG")" "$REMOTE_LOG" "$REMOTE_SHELL_CMD" "$REMOTE_LOG")"
-START_CMD="$(printf 'nohup bash -c %q > /dev/null 2>&1 < /dev/null & disown' "$LAUNCHER_CMD")"
-ssh "$SSH_ALIAS" "$START_CMD"
 
-WATCH_CMD="$(printf 'tail -n +1 -f %q & TPID=$!; while [ ! -f %q ]; do sleep 0.5; done; sleep 0.2; kill $TPID 2>/dev/null; wait $TPID 2>/dev/null' \
+# Send commands to the remote shell base64-encoded rather than via nested
+# printf %q layers: ssh flattens all trailing arguments into one string and
+# reparses it remotely, so every extra layer of wrapping (nohup, bash -c,
+# ssh itself) needs its own %q pass, and getting one wrong silently breaks
+# things (confirmed: an earlier `&` vs `&&` precedence bug backgrounded a
+# whole `mkdir && truncate && job` chain instead of just the job). Base64's
+# alphabet has no shell metacharacters, so it survives any number of
+# reparses unmodified -- decode into a `bash -c` argument (not piped to
+# bash's stdin) so `ps` still shows the real decoded command, not "bash"
+# with no argv or the base64 blob itself.
+launcher_b64="$(printf '%s' "$LAUNCHER_CMD" | base64 -w0)"
+ssh "$SSH_ALIAS" "nohup bash -c \"\$(echo $launcher_b64 | base64 -d)\" < /dev/null > /dev/null 2>&1 & disown"
+
+WATCH_CMD_PLAIN="$(printf 'tail -n +1 -f %q & TPID=$!; while [ ! -f %q ]; do sleep 0.5; done; sleep 0.2; kill $TPID 2>/dev/null; wait $TPID 2>/dev/null' \
     "$REMOTE_LOG" "$EXIT_FILE")"
+watch_b64="$(printf '%s' "$WATCH_CMD_PLAIN" | base64 -w0)"
 
 while true; do
-    ssh -tt "$SSH_ALIAS" "$WATCH_CMD"
+    ssh -tt "$SSH_ALIAS" "exec bash -c \"\$(echo $watch_b64 | base64 -d)\""
     if ssh "$SSH_ALIAS" "test -f $(printf '%q' "$EXIT_FILE")" 2>/dev/null; then
         break
     fi
