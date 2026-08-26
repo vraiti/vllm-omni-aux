@@ -126,7 +126,7 @@ done
 # separate, plain `ssh -tt ... tail -f` -- a reconnect just re-runs the
 # watcher, it doesn't touch the already-running job.
 EXIT_FILE="/tmp/.rrr_exit_$$_$(date +%s)"
-REMOTE_LOG="/tmp/logs/rrr.log"
+REMOTE_LOG="/tmp/logs/rrr-$(date +%Y%m%d-%H%M%S).log"
 
 REMOTE_SHELL_CMD+="$(printf '; echo $? > %q' "$EXIT_FILE")"
 LAUNCHER_CMD="$(printf 'mkdir -p %q; : > %q; ( %s ) > %q 2>&1 < /dev/null' \
