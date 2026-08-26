@@ -19,8 +19,6 @@ PROJECT_ROOT = str(Path(VLLM_OMNI_AUX_DIR).parent)
 VLLM_OMNI_DIR = os.path.join(PROJECT_ROOT, "vllm-omni")
 VENV_DIR = os.path.join(PROJECT_ROOT, "venv")
 DEPLOY_CONFIGS_DIR = os.path.join(VLLM_OMNI_AUX_DIR, "deploy-configs")
-LOG_DIR = "/tmp/logs"
-LOG_PATH = os.path.join(LOG_DIR, time.strftime("vllm-%d%m%Y-%H%M%S.log"))
 HEALTH_URL = "http://localhost:8000/health"
 POLL_INTERVAL = 2
 
@@ -153,16 +151,6 @@ def main():
     env["VIRTUAL_ENV"] = VENV_DIR
     env["PATH"] = os.path.join(VENV_DIR, "bin") + ":" + env.get("PATH", "")
 
-    os.makedirs(LOG_DIR, exist_ok=True)
-    Path(LOG_PATH).touch()
-    stable_log = os.path.join(LOG_DIR, "vllm.log")
-    try:
-        os.remove(stable_log)
-    except FileNotFoundError:
-        pass
-    os.link(LOG_PATH, stable_log)
-    print(f"Log file: {LOG_PATH} (tail -f to follow live)")
-
     vllm = os.path.join(VENV_DIR, "bin", "vllm")
     serve_cmd = f'{vllm} serve --omni {model} --deploy {deploy_path}'
     if args.enforce_eager:
@@ -176,55 +164,31 @@ def main():
             serve_cmd += f' --enable-auto-tool-choice --tool-call-parser {tool_call_parser}'
     cmd = shlex.split(serve_cmd)
 
-    # Redirect straight to the log file rather than `... | tee LOG_PATH`:
-    # tee's stdout inherits whatever pty this script itself is attached to
-    # (e.g. an `ssh -tt` session), and start_new_session=True below doesn't
-    # change that -- so if that terminal ever stalls (flow control, a slow
-    # SSH client, anything), tee's write() blocks, backing up the pipe into
-    # vllm serve's own stdout write, which freezes the *entire* asyncio
-    # event loop the instant it next tries to log anything (confirmed via
-    # py-spy: the whole server hung inside logging's blocking flush()).
-    # Writing directly to a local file has no such dependency on a live
-    # terminal being drained; use `tail -f` on LOG_PATH for live output.
-    log_fh = open(LOG_PATH, "a")
+    if args.i:
+        proc = subprocess.Popen(cmd, env=env)
+        try:
+            return proc.wait()
+        except KeyboardInterrupt:
+            proc.terminate()
+            proc.wait()
+            return 130
 
-    # tail -f follows the file independently of vllm serve's own writes --
-    # its stdout is deploy.py's own (inherited, unredirected), so a stalled
-    # terminal on this end only ever blocks `tail`, never the server. This
-    # restores the old live-output UX without recreating the tee-to-a-live-
-    # terminal dependency that caused the deadlock in the first place.
-    tail_proc = subprocess.Popen(["tail", "-f", LOG_PATH])
+    proc = subprocess.Popen(cmd, start_new_session=True, env=env)
 
-    try:
-        if args.i:
-            proc = subprocess.Popen(cmd, env=env, stdout=log_fh, stderr=subprocess.STDOUT)
-            try:
-                return proc.wait()
-            except KeyboardInterrupt:
-                proc.terminate()
-                proc.wait()
-                return 130
+    while True:
+        time.sleep(POLL_INTERVAL)
 
-        proc = subprocess.Popen(cmd, start_new_session=True, env=env, stdout=log_fh, stderr=subprocess.STDOUT)
+        if proc.poll() is not None:
+            print(f"vllm process died with exit code {proc.returncode}", file=sys.stderr)
+            return 1
 
-        while True:
-            time.sleep(POLL_INTERVAL)
-
-            if proc.poll() is not None:
-                print(f"vllm process died with exit code {proc.returncode}", file=sys.stderr)
-                print(f"Log file: {LOG_PATH}", file=sys.stderr)
-                return 1
-
-            try:
-                resp = urllib.request.urlopen(HEALTH_URL, timeout=5)
-                if resp.status == 200:
-                    print(f"Health check passed. Server is ready.")
-                    print(f"Log file: {LOG_PATH}")
-                    return 0
-            except (urllib.error.URLError, OSError):
-                pass
-    finally:
-        tail_proc.terminate()
+        try:
+            resp = urllib.request.urlopen(HEALTH_URL, timeout=5)
+            if resp.status == 200:
+                print(f"Health check passed. Server is ready.")
+                return 0
+        except (urllib.error.URLError, OSError):
+            pass
 
 
 if __name__ == "__main__":
