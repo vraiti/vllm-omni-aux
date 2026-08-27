@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Snapshot an instance's root and cache EBS volumes and republish them as
-a new version of a named AMI.
+a new version of a named AMI. With --cache-only, only the cache volume is
+re-snapshotted -- the AMI's existing root snapshot is carried over as-is.
 
-Invoked by aws-manage's `snapshot` subcommand, which has already resolved
-the alias to an instance id. Not meant to be run standalone against an
-arbitrary instance without checking what AMI it's about to replace.
+Invoked by aws-manage's `snapshot`/`snapshot-cache` subcommands, which have
+already resolved the alias to an instance id. Not meant to be run standalone
+against an arbitrary instance without checking what AMI it's about to
+replace.
 """
 
 from __future__ import annotations
@@ -66,6 +68,9 @@ def main() -> int:
     parser.add_argument("--alias", required=True)
     parser.add_argument("--ami-name", default="vraiti-rhel10-cuda")
     parser.add_argument("--cache-device", default="/dev/sdf")
+    parser.add_argument("--cache-only", action="store_true",
+                         help="Only re-snapshot the cache volume; carry the "
+                              "AMI's existing root snapshot over unchanged.")
     args = parser.parse_args()
 
     instance = aws_json(
@@ -73,12 +78,13 @@ def main() -> int:
     )["Reservations"][0]["Instances"][0]
 
     root_device_name = instance["RootDeviceName"]
-    root_volume_id = find_volume(instance, root_device_name)
     cache_volume_id = find_volume(instance, args.cache_device)
+    root_volume_id = None if args.cache_only else find_volume(instance, root_device_name)
 
     print(f"Instance:     {args.instance_id}")
-    print(f"Root volume:  {root_volume_id} ({root_device_name})")
     print(f"Cache volume: {cache_volume_id} ({args.cache_device})")
+    if root_volume_id is not None:
+        print(f"Root volume:  {root_volume_id} ({root_device_name})")
 
     old_images = aws_json(
         "ec2", "describe-images", "--owners", "self",
@@ -92,20 +98,26 @@ def main() -> int:
     print(f"Current AMI:  {old_ami_id}")
 
     ts = time.strftime("%Y%m%d-%H%M%S")
-    root_snapshot_id = create_snapshot(
-        root_volume_id, f"{args.ami_name}-root-{ts}",
-        f"{args.ami_name} root snapshot from {args.alias} ({ts})",
-    )
+
+    snapshot_ids_to_await = []
     cache_snapshot_id = create_snapshot(
         cache_volume_id, f"{args.ami_name}-cache-{ts}",
         f"{args.ami_name} cache snapshot from {args.alias} ({ts})",
     )
+    snapshot_ids_to_await.append(cache_snapshot_id)
+
+    root_snapshot_id = None
+    if root_volume_id is not None:
+        root_snapshot_id = create_snapshot(
+            root_volume_id, f"{args.ami_name}-root-{ts}",
+            f"{args.ami_name} root snapshot from {args.alias} ({ts})",
+        )
+        snapshot_ids_to_await.append(root_snapshot_id)
 
     print("Waiting for snapshots to complete (this can take a while)...")
     aws("ec2", "wait", "snapshot-completed",
-        "--snapshot-ids", root_snapshot_id, cache_snapshot_id)
+        "--snapshot-ids", *snapshot_ids_to_await)
 
-    old_root_mapping = ebs_mapping_from_image(old_image, root_device_name)
     old_cache_mapping = ebs_mapping_from_image(old_image, args.cache_device)
 
     def replace_snapshot(mapping: dict, snapshot_id: str) -> dict:
@@ -114,8 +126,13 @@ def main() -> int:
         ebs.pop("Encrypted", None)
         return {"DeviceName": mapping["DeviceName"], "Ebs": ebs}
 
+    old_root_mapping = ebs_mapping_from_image(old_image, root_device_name)
+    if root_snapshot_id is not None:
+        new_root_mapping = replace_snapshot(old_root_mapping, root_snapshot_id)
+    else:
+        new_root_mapping = old_root_mapping
     new_block_device_mappings = [
-        replace_snapshot(old_root_mapping, root_snapshot_id),
+        new_root_mapping,
         replace_snapshot(old_cache_mapping, cache_snapshot_id),
     ]
 
@@ -143,7 +160,8 @@ def main() -> int:
 
     print()
     print(f"New AMI:      {new_ami_id}")
-    print(f"Root snapshot:  {root_snapshot_id}")
+    if root_snapshot_id is not None:
+        print(f"Root snapshot:  {root_snapshot_id}")
     print(f"Cache snapshot: {cache_snapshot_id}")
     print(f"Old AMI {old_ami_id} deregistered; its snapshots were left in place.")
     return 0

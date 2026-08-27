@@ -20,6 +20,9 @@ Commands:
   snapshot <alias>                 Snapshot the instance's root and cache EBS
                                     volumes and republish them as the
                                     $AMI_NAME AMI
+  snapshot-cache <alias>           Like snapshot, but only re-snapshots the
+                                    cache EBS volume; the AMI's existing root
+                                    snapshot is carried over unchanged
 EOF
     exit 1
 }
@@ -257,16 +260,29 @@ cmd_snapshot() {
         --cache-device "$CACHE_DEVICE_NAME"
 }
 
+cmd_snapshot_cache() {
+    set_alias "${1:?Usage: $0 snapshot-cache <alias>}"
+    local id
+    id=$(get_instance_id)
+    python3 "$SCRIPT_DIR/aws-snapshot.py" \
+        --instance-id "$id" \
+        --alias "$INSTANCE_ALIAS" \
+        --ami-name "$AMI_NAME" \
+        --cache-device "$CACHE_DEVICE_NAME" \
+        --cache-only
+}
+
 COMMAND="${1:-}"
 shift || true
 
 case "$COMMAND" in
-    create)   cmd_create "$@" ;;
-    start)    cmd_start "$@" ;;
-    stop)     cmd_stop "$@" ;;
-    delete)   cmd_delete "$@" ;;
-    mv)       cmd_mv "$@" ;;
-    ls)       cmd_ls ;;
-    snapshot) cmd_snapshot "$@" ;;
-    *)        usage ;;
+    create)         cmd_create "$@" ;;
+    start)          cmd_start "$@" ;;
+    stop)           cmd_stop "$@" ;;
+    delete)         cmd_delete "$@" ;;
+    mv)             cmd_mv "$@" ;;
+    ls)             cmd_ls ;;
+    snapshot)       cmd_snapshot "$@" ;;
+    snapshot-cache) cmd_snapshot_cache "$@" ;;
+    *)              usage ;;
 esac
