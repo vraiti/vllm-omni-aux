@@ -1,8 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-INSTANCE_TYPE="${1:?Usage: $0 <instance-type> [alias]}"
-SSH_ALIAS="${2:-aws}"
+RAW=0
+ARGS=()
+for arg in "$@"; do
+    if [[ "$arg" == "--raw" ]]; then
+        RAW=1
+    else
+        ARGS+=("$arg")
+    fi
+done
+
+INSTANCE_TYPE="${ARGS[0]:?Usage: $0 <instance-type> [alias] [--raw]}"
+SSH_ALIAS="${ARGS[1]:-aws}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 KEY_NAME="vraiti-ed25519"
@@ -57,21 +67,14 @@ EOF
 
 bash "$SCRIPT_DIR/poll-ssh.sh" "$SSH_ALIAS"
 
-PROJECT_DIR="$PWD"
-while [[ "$PROJECT_DIR" != "$HOME/omni" && "$PROJECT_DIR" != "/" ]]; do
-    if [[ "$(dirname "$PROJECT_DIR")" == "$HOME/omni" ]]; then
-        break
-    fi
-    PROJECT_DIR="$(dirname "$PROJECT_DIR")"
-done
-BRANCH=$(git -C "$PROJECT_DIR/vllm-omni" branch --show-current)
-if [[ -z "$BRANCH" ]]; then
-    echo "ERROR: could not determine current branch in vllm-omni" >&2
-    exit 1
+if [[ "$RAW" -eq 1 ]]; then
+    echo "Skipping install-shutdown-hook.sh (--raw)"
+else
+    echo "Running install-shutdown-hook.sh on $SSH_ALIAS..."
+    ssh "$SSH_ALIAS" bash -s < "$SCRIPT_DIR/install-shutdown-hook.sh"
+    echo "Repos aren't cloned here anymore -- sync them with run-remote-rsync.sh," \
+         "then run create-venv.sh on the instance to build the venv."
 fi
-
-echo "Running setup-instance.sh on $SSH_ALIAS (branch: $BRANCH)..."
-ssh "$SSH_ALIAS" bash -s -- "$BRANCH" < "$SCRIPT_DIR/setup-instance.sh"
 
 echo ""
 echo "Instance: $INSTANCE_ID"
