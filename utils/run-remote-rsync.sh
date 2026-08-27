@@ -32,8 +32,31 @@ is_known_host() {
     return 1
 }
 
+# --venv NAME can appear anywhere in the argument list; it selects the venv
+# directory to activate remotely (relative to REMOTE_ROOT), defaulting to
+# "venv" for hosts provisioned the standard way.
+VENV_NAME="venv"
+ARGS=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --venv)
+            VENV_NAME="$2"
+            shift 2
+            ;;
+        --venv=*)
+            VENV_NAME="${1#--venv=}"
+            shift
+            ;;
+        *)
+            ARGS+=("$1")
+            shift
+            ;;
+    esac
+done
+set -- "${ARGS[@]}"
+
 if [[ $# -lt 1 ]]; then
-    echo "Usage: $0 [alias[:remote_path]] <command> [args...]" >&2
+    echo "Usage: $0 [alias[:remote_path]] [--venv NAME] <command> [args...]" >&2
     exit 1
 fi
 
@@ -114,7 +137,7 @@ HF_TOKEN=$(cat ~/.secret/hf)
 # than passing activate/exec/env as separate ssh arguments -- an env-var
 # prefix (VAR=val cmd1 && cmd2) only applies to cmd1, not cmd2, so HF_TOKEN
 # must be `export`ed inside the string, not passed as a leading ssh arg.
-REMOTE_SHELL_CMD="$(printf 'export HF_TOKEN=%q; source %q/venv/bin/activate && %q' "$HF_TOKEN" "$REMOTE_ROOT" "$REMOTE_CMD")"
+REMOTE_SHELL_CMD="$(printf 'export HF_TOKEN=%q; source %q/%q/bin/activate && %q' "$HF_TOKEN" "$REMOTE_ROOT" "$VENV_NAME" "$REMOTE_CMD")"
 for arg in "$@"; do
     REMOTE_SHELL_CMD+="$(printf ' %q' "$arg")"
 done
