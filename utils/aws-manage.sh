@@ -8,15 +8,23 @@ usage() {
 Usage: $0 <command> [args]
 
 Commands:
-  create <instance-type> [alias]   Launch a new instance (alias defaults to 'aws')
+  create <instance-type> [alias] [--raw]
+                                    Launch a new instance (alias defaults to 'aws').
+                                    --raw skips running install-shutdown-hook.sh.
   start [alias]                    Start the stopped instance and poll for SSH
   stop [alias]                     Stop the running instance
   delete [alias]                   Terminate the instance and remove SSH config
   mv <old-alias> <new-alias>       Re-alias the instance locally
   ls                               List SSH config entries in ~/.ssh/config.d/
+  snapshot <alias>                 Snapshot the instance's root and cache EBS
+                                    volumes and republish them as the
+                                    $AMI_NAME AMI
 EOF
     exit 1
 }
+
+AMI_NAME="vraiti-rhel10-cuda"
+CACHE_DEVICE_NAME="/dev/sdf"
 
 INSTANCE_ALIAS="aws"
 SSH_CONFIG="$HOME/.ssh/config.d/$INSTANCE_ALIAS"
@@ -73,8 +81,18 @@ setup_sshfs() {
 }
 
 cmd_create() {
-    local instance_type="${1:?Usage: $0 create <instance-type> [alias]}"
-    set_alias "${2:-}"
+    local raw=0
+    local positional=()
+    for arg in "$@"; do
+        if [[ "$arg" == "--raw" ]]; then
+            raw=1
+        else
+            positional+=("$arg")
+        fi
+    done
+
+    local instance_type="${positional[0]:?Usage: $0 create <instance-type> [alias] [--raw]}"
+    set_alias "${positional[1]:-}"
 
     local project_dir="$PWD"
     while [[ "$project_dir" != "$HOME/omni" && "$project_dir" != "/" ]]; do
@@ -90,7 +108,11 @@ cmd_create() {
         echo "ERROR: alias '$INSTANCE_ALIAS' already exists" >&2
         exit 1
     fi
-    bash "$SCRIPT_DIR/launch-instance.sh" "$instance_type" "$INSTANCE_ALIAS"
+    if [[ "$raw" -eq 1 ]]; then
+        bash "$SCRIPT_DIR/launch-instance.sh" "$instance_type" "$INSTANCE_ALIAS" --raw
+    else
+        bash "$SCRIPT_DIR/launch-instance.sh" "$instance_type" "$INSTANCE_ALIAS"
+    fi
     setup_sshfs
 }
 
@@ -223,15 +245,27 @@ cmd_delete() {
     echo "Instance $id terminated, SSH alias '$SSH_ALIAS' removed."
 }
 
+cmd_snapshot() {
+    set_alias "${1:?Usage: $0 snapshot <alias>}"
+    local id
+    id=$(get_instance_id)
+    python3 "$SCRIPT_DIR/aws-snapshot.py" \
+        --instance-id "$id" \
+        --alias "$INSTANCE_ALIAS" \
+        --ami-name "$AMI_NAME" \
+        --cache-device "$CACHE_DEVICE_NAME"
+}
+
 COMMAND="${1:-}"
 shift || true
 
 case "$COMMAND" in
-    create) cmd_create "$@" ;;
-    start)  cmd_start "$@" ;;
-    stop)   cmd_stop "$@" ;;
-    delete) cmd_delete "$@" ;;
-    mv)     cmd_mv "$@" ;;
-    ls)     cmd_ls ;;
-    *)      usage ;;
+    create)   cmd_create "$@" ;;
+    start)    cmd_start "$@" ;;
+    stop)     cmd_stop "$@" ;;
+    delete)   cmd_delete "$@" ;;
+    mv)       cmd_mv "$@" ;;
+    ls)       cmd_ls ;;
+    snapshot) cmd_snapshot "$@" ;;
+    *)        usage ;;
 esac
