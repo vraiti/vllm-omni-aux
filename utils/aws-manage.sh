@@ -2,6 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+source "$SCRIPT_DIR/aws-retry.sh"
 
 usage() {
     cat <<EOF
@@ -203,7 +204,7 @@ cmd_start() {
     local id
     id=$(get_instance_id)
     echo "Starting $id..."
-    aws ec2 start-instances --instance-ids "$id" --output text
+    aws_retry_on_capacity aws ec2 start-instances --instance-ids "$id" --output text
 
     echo "Waiting for running state..."
     aws ec2 wait instance-running --instance-ids "$id"

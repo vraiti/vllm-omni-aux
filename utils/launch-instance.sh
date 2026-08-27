@@ -14,6 +14,7 @@ done
 INSTANCE_TYPE="${ARGS[0]:?Usage: $0 <instance-type> [alias] [--raw]}"
 SSH_ALIAS="${ARGS[1]:-aws}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/aws-retry.sh"
 
 KEY_NAME="vraiti-ed25519"
 SECURITY_GROUP="sg-04371316571a0bf71"
@@ -34,7 +35,7 @@ fi
 echo "AMI: $AMI_ID"
 
 echo "Launching $INSTANCE_TYPE instance..."
-INSTANCE_ID=$(aws ec2 run-instances \
+INSTANCE_ID=$(aws_retry_on_capacity aws ec2 run-instances \
     --image-id "$AMI_ID" \
     --instance-type "$INSTANCE_TYPE" \
     --key-name "$KEY_NAME" \
@@ -68,12 +69,24 @@ EOF
 bash "$SCRIPT_DIR/poll-ssh.sh" "$SSH_ALIAS"
 
 if [[ "$RAW" -eq 1 ]]; then
-    echo "Skipping install-shutdown-hook.sh (--raw)"
+    echo "Skipping repo sync/install-shutdown-hook.sh/create-venv.sh (--raw)"
 else
+    # Single-quoted so the literal text ($HOME, unexpanded) survives until
+    # it's sent to the remote shell below -- it must expand against the
+    # remote user's home, not whatever $HOME happens to be on this machine.
+    REMOTE_ROOT='$HOME/vraiti'
+    REMOTE_ROOT="$(ssh "$SSH_ALIAS" "echo $REMOTE_ROOT")"
+
+    echo "Syncing repos to $SSH_ALIAS..."
+    bash "$SCRIPT_DIR/sync-remote.sh" "$SSH_ALIAS" "$REMOTE_ROOT"
+
+    scp "$SCRIPT_DIR/install-shutdown-hook.sh" "$SCRIPT_DIR/create-venv.sh" "$SSH_ALIAS:/tmp/"
+
     echo "Running install-shutdown-hook.sh on $SSH_ALIAS..."
-    ssh "$SSH_ALIAS" bash -s < "$SCRIPT_DIR/install-shutdown-hook.sh"
-    echo "Repos aren't cloned here anymore -- sync them with run-remote-rsync.sh," \
-         "then run create-venv.sh on the instance to build the venv."
+    ssh "$SSH_ALIAS" bash /tmp/install-shutdown-hook.sh
+
+    echo "Running create-venv.sh on $SSH_ALIAS..."
+    ssh "$SSH_ALIAS" bash /tmp/create-venv.sh
 fi
 
 echo ""

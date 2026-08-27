@@ -60,7 +60,10 @@ if [[ $# -lt 1 ]]; then
     exit 1
 fi
 
-REMOTE_ROOT="/app"
+# Single-quoted so the literal text ($HOME, unexpanded) survives until it's
+# sent to the remote shell below -- it must expand against the remote
+# user's home, not whatever $HOME happens to be on this machine.
+REMOTE_ROOT='$HOME/vraiti'
 ALIAS_CANDIDATE="${1%%:*}"
 if is_known_host "$ALIAS_CANDIDATE"; then
     SSH_ALIAS="$ALIAS_CANDIDATE"
@@ -77,6 +80,13 @@ else
     exit 1
 fi
 
+# Resolve any remote-side expansion (e.g. $HOME) once, up front, so every
+# other use of REMOTE_ROOT below is a plain, already-concrete path -- it
+# doesn't need to know whether it's embedded in a raw ssh command string
+# (which a remote shell would expand) or a printf %q-escaped one (which
+# would escape the literal '$' and never expand it).
+REMOTE_ROOT="$(ssh "$SSH_ALIAS" "echo $REMOTE_ROOT")"
+
 PROJECT_DIR="$PWD"
 while [[ "$PROJECT_DIR" != "$HOME/omni" && "$PROJECT_DIR" != "/" ]]; do
     if [[ "$(dirname "$PROJECT_DIR")" == "$HOME/omni" ]]; then
@@ -85,35 +95,7 @@ while [[ "$PROJECT_DIR" != "$HOME/omni" && "$PROJECT_DIR" != "/" ]]; do
     PROJECT_DIR="$(dirname "$PROJECT_DIR")"
 done
 
-REPOS_FILE="$PROJECT_DIR/repos.txt"
-
-if [[ ! -f "$REPOS_FILE" ]]; then
-    echo "ERROR: $REPOS_FILE not found" >&2
-    exit 1
-fi
-
-while IFS= read -r entry || [[ -n "$entry" ]]; do
-    entry="${entry%%#*}"
-    entry="${entry// /}"
-    [[ -z "$entry" ]] && continue
-
-    repo_name="${entry%%:*}"
-    repo_dir="$PROJECT_DIR/$repo_name"
-
-    if [[ ! -d "$repo_dir" ]]; then
-        echo "WARNING: $repo_dir does not exist, skipping"
-        continue
-    fi
-
-    if [[ -e "$repo_dir/.git" ]] && [[ -n "$(git -C "$repo_dir" status --porcelain)" ]]; then
-        echo "ERROR: $repo_dir has uncommitted changes" >&2
-        exit 1
-    fi
-
-    echo "Syncing $repo_name..."
-    rsync -az --delete \
-        "$repo_dir/" "$SSH_ALIAS:$REMOTE_ROOT/$repo_name/"
-done < "$REPOS_FILE"
+bash "$SCRIPT_DIR/sync-remote.sh" "$SSH_ALIAS" "$REMOTE_ROOT" "$PROJECT_DIR"
 
 AUX_DIR="$PROJECT_DIR/vllm-omni-aux"
 

@@ -13,7 +13,7 @@ from pathlib import Path
 
 # Derived from this script's own location rather than hardcoded to /app, so
 # this works unchanged on a project root synced elsewhere (e.g. run via
-# run-remote-rsync.sh's `alias:remote_path` form onto a non-/app host).
+# run-remote.sh's `alias:remote_path` form onto a non-/app host).
 VLLM_OMNI_AUX_DIR = str(Path(__file__).resolve().parent.parent)
 PROJECT_ROOT = str(Path(VLLM_OMNI_AUX_DIR).parent)
 VLLM_OMNI_DIR = os.path.join(PROJECT_ROOT, "vllm-omni")

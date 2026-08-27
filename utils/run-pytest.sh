@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Run pytest against the synced vllm-omni checkout, inside its venv.
-# Invoke via run-remote-rsync.sh so the tree is synced first, e.g.:
-#   run-remote-rsync.sh vllm-omni run-pytest.sh entrypoints/openai_api/test_realtime_session.py -m "core_model and cpu"
+# Invoke via run-remote.sh so the tree is synced first, e.g.:
+#   run-remote.sh vllm-omni run-pytest.sh entrypoints/openai_api/test_realtime_session.py -m "core_model and cpu"
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

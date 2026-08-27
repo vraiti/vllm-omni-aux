@@ -1,28 +1,37 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Assumes vllm-omni is already present under /app (e.g. synced by
-# run-remote-rsync.sh) -- this script only builds the venv and installs into
+# Assumes vllm-omni is already present under $HOME/vraiti (e.g. synced by
+# run-remote.sh) -- this script only builds the venv and installs into
 # it, it does not clone anything.
-VLLM_OMNI_DIR="/app/vllm-omni"
+PROJECT_ROOT="$HOME/vraiti"
+VLLM_OMNI_DIR="$PROJECT_ROOT/vllm-omni"
 
-# With no args, create the venv at /app/venv. With args, pass them straight
-# through to `uv venv` (e.g. `create-venv.sh other-venv --python
+# With no args, create the venv at $HOME/vraiti/venv. With args, pass them
+# straight through to `uv venv` (e.g. `create-venv.sh other-venv --python
 # path/to/other/python`) -- the first non-flag argument is then the venv
 # path, same as uv venv's own convention, defaulting to uv's own default
 # (.venv in cwd) if only flags were given.
 if [[ $# -eq 0 ]]; then
-    VENV_ARGS=(/app/venv)
-    VENV_DIR="/app/venv"
+    VENV_ARGS=("$PROJECT_ROOT/venv")
+    VENV_DIR="$PROJECT_ROOT/venv"
 elif [[ "$1" != -* ]]; then
     VENV_ARGS=("$@")
     VENV_DIR="$1"
 else
     VENV_ARGS=("$@")
-    VENV_DIR=".venv"
+    VENV_DIR="venv"
+fi
+
+# Default to Python 3.14 unless the caller already specified one.
+if [[ " ${VENV_ARGS[*]} " != *" --python "* && " ${VENV_ARGS[*]} " != *" --python="* ]]; then
+    VENV_ARGS+=(--python 3.14)
 fi
 
 echo "Creating venv..."
+if [ -d $VENV_DIR ]; then
+	rm -f $VENV_DIR
+fi
 uv venv "${VENV_ARGS[@]}"
 source "$VENV_DIR/bin/activate"
 
@@ -53,7 +62,7 @@ fi
 echo "Installing vllm-omni in dev mode..."
 cd "$VLLM_OMNI_DIR"
 uv pip install setuptools-scm
-uv pip install -e . --no-build-isolation
+VLLM_OMNI_VERSION_OVERRIDE=0.0.0 uv pip install -e . --no-build-isolation
 
 echo "Done."
 echo "  vllm:       $VLLM_VERSION"
