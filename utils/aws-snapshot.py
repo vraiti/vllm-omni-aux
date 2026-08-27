@@ -130,7 +130,11 @@ def main() -> int:
     if root_snapshot_id is not None:
         new_root_mapping = replace_snapshot(old_root_mapping, root_snapshot_id)
     else:
-        new_root_mapping = old_root_mapping
+        # Reused as-is (its SnapshotId is unchanged), but the API still
+        # rejects Encrypted alongside any SnapshotId, same as in
+        # replace_snapshot above.
+        new_root_mapping = replace_snapshot(
+            old_root_mapping, old_root_mapping["Ebs"]["SnapshotId"])
     new_block_device_mappings = [
         new_root_mapping,
         replace_snapshot(old_cache_mapping, cache_snapshot_id),
