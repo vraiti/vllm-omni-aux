@@ -26,7 +26,11 @@ if [[ ! -f "$REPOS_FILE" ]]; then
     exit 1
 fi
 
-while IFS= read -r entry || [[ -n "$entry" ]]; do
+# Read from fd 3, not stdin: ssh/rsync inside this loop otherwise inherit
+# the loop's stdin redirect and drain the rest of repos.txt as if it were
+# their own input, silently truncating the loop after the first iteration
+# that calls ssh.
+while IFS= read -r entry <&3 || [[ -n "$entry" ]]; do
     entry="${entry%%#*}"
     entry="${entry// /}"
     [[ -z "$entry" ]] && continue
@@ -66,4 +70,4 @@ while IFS= read -r entry || [[ -n "$entry" ]]; do
     if [[ -e "$repo_dir/.git" ]]; then
         ssh "$SSH_ALIAS" "echo $(printf '%q' "$local_head") > $(printf '%q' "$marker_path")"
     fi
-done < "$REPOS_FILE"
+done 3< "$REPOS_FILE"
