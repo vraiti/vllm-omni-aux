@@ -30,7 +30,7 @@ fi
 
 echo "Creating venv..."
 if [ -d $VENV_DIR ]; then
-	rm -f $VENV_DIR
+	rm -rf $VENV_DIR
 fi
 uv venv "${VENV_ARGS[@]}"
 source "$VENV_DIR/bin/activate"
