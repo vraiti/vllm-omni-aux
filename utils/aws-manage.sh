@@ -168,8 +168,12 @@ cmd_stop() {
     id=$(get_instance_id)
     echo "Stopping $id..."
     aws ec2 stop-instances --instance-ids "$id" --output text
+
+    echo "Waiting for stopped state..."
+    aws ec2 wait instance-stopped --instance-ids "$id"
+
     set_state "$SSH_CONFIG" "stopped"
-    echo "Instance stopping."
+    echo "Instance stopped."
 }
 
 cmd_start() {
