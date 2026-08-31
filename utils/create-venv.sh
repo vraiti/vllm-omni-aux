@@ -7,6 +7,16 @@ set -euo pipefail
 PROJECT_ROOT="$HOME/vraiti"
 VLLM_OMNI_DIR="$PROJECT_ROOT/vllm-omni"
 
+# cuda-toolkit's rpm doesn't add itself to PATH, and this script is normally
+# invoked via `ssh host "bash create-venv.sh"`, which runs as a
+# non-interactive, non-login shell -- /etc/profile.d/cuda.sh (which does add
+# it) is never sourced in that mode. Add it explicitly rather than depending
+# on shell startup files that this invocation path skips.
+if [[ -d /usr/local/cuda/bin ]]; then
+    export PATH="/usr/local/cuda/bin:$PATH"
+    export LD_LIBRARY_PATH="/usr/local/cuda/lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+fi
+
 # With no args, create the venv at $HOME/vraiti/venv. With args, pass them
 # straight through to `uv venv` (e.g. `create-venv.sh other-venv --python
 # path/to/other/python`) -- the first non-flag argument is then the venv

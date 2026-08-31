@@ -36,15 +36,18 @@ is_known_host() {
 # directory to activate remotely (relative to REMOTE_ROOT), defaulting to
 # "venv" for hosts provisioned the standard way.
 VENV_NAME="venv"
+VENV_SPECIFIED=0
 ARGS=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --venv)
             VENV_NAME="$2"
+            VENV_SPECIFIED=1
             shift 2
             ;;
         --venv=*)
             VENV_NAME="${1#--venv=}"
+            VENV_SPECIFIED=1
             shift
             ;;
         *)
@@ -86,6 +89,7 @@ fi
 # (which a remote shell would expand) or a printf %q-escaped one (which
 # would escape the literal '$' and never expand it).
 REMOTE_ROOT="$(ssh "$SSH_ALIAS" "echo $REMOTE_ROOT")"
+ssh "$SSH_ALIAS" "mkdir -p $(printf '%q' "$REMOTE_ROOT")"
 
 PROJECT_DIR="$PWD"
 while [[ "$PROJECT_DIR" != "$HOME/omni" && "$PROJECT_DIR" != "/" ]]; do
@@ -96,6 +100,17 @@ while [[ "$PROJECT_DIR" != "$HOME/omni" && "$PROJECT_DIR" != "/" ]]; do
 done
 
 bash "$SCRIPT_DIR/sync-remote.sh" "$SSH_ALIAS" "$REMOTE_ROOT" "$PROJECT_DIR"
+
+REMOTE_VENV_DIR="$REMOTE_ROOT/$VENV_NAME"
+if ! ssh "$SSH_ALIAS" "test -d $(printf '%q' "$REMOTE_VENV_DIR")"; then
+    if [[ "$VENV_SPECIFIED" -eq 1 ]]; then
+        echo "ERROR: venv '$VENV_NAME' not found at $SSH_ALIAS:$REMOTE_VENV_DIR" >&2
+        exit 1
+    fi
+    echo "venv not found at $SSH_ALIAS:$REMOTE_VENV_DIR, creating..."
+    scp "$SCRIPT_DIR/create-venv.sh" "$SSH_ALIAS:/tmp/"
+    ssh "$SSH_ALIAS" "bash /tmp/create-venv.sh $(printf '%q' "$REMOTE_VENV_DIR")"
+fi
 
 AUX_DIR="$PROJECT_DIR/vllm-omni-aux"
 
