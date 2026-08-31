@@ -70,14 +70,18 @@ def wait_for_snapshots(snapshot_ids: list[str], poll_seconds: int = 15,
         snapshots = aws_json(
             "ec2", "describe-snapshots", "--snapshot-ids", *pending,
         )["Snapshots"]
+        progress = {}
         for snap in snapshots:
             state = snap["State"]
             if state == "completed":
                 pending.discard(snap["SnapshotId"])
             elif state == "error":
                 raise RuntimeError(f"snapshot {snap['SnapshotId']} failed: {snap}")
+            else:
+                progress[snap["SnapshotId"]] = snap.get("Progress", "?")
         if pending:
-            print(f"  still pending: {sorted(pending)} ({poll_seconds}s)...")
+            status = ", ".join(f"{sid}: {progress.get(sid, '?')}" for sid in sorted(pending))
+            print(f"  still pending: {status} ({poll_seconds}s)...")
             time.sleep(poll_seconds)
 
 
