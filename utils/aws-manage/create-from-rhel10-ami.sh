@@ -74,6 +74,18 @@ fi
 echo "=== Phase 2: toolkit, cache volume, dlami-nvme, SSM agent ==="
 dnf install -y python3-pip python3-devel cuda-toolkit git lvm2
 
+# cuda-toolkit's rpm doesn't add itself to PATH (that's expected NVIDIA
+# behavior, not something the package handles) -- without this, nvcc and
+# friends are only reachable via the full /usr/local/cuda-*/bin path, which
+# broke create-venv.sh's CUDA_VERSION detection.
+echo "Adding CUDA toolkit to PATH..."
+tee /etc/profile.d/cuda.sh > /dev/null <<'PROFILE'
+export PATH=/usr/local/cuda/bin${PATH:+:${PATH}}
+export LD_LIBRARY_PATH=/usr/local/cuda/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
+PROFILE
+chmod +x /etc/profile.d/cuda.sh
+source /etc/profile.d/cuda.sh
+
 echo "Verifying NVIDIA driver..."
 nvidia-smi
 

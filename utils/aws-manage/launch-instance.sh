@@ -15,21 +15,19 @@ INSTANCE_TYPE="${ARGS[0]:?Usage: $0 <instance-type> [alias] [--raw]}"
 SSH_ALIAS="${ARGS[1]:-aws}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/aws-retry.sh"
+source "$SCRIPT_DIR/aws-config.sh"
 
-KEY_NAME="vraiti-ed25519"
-SECURITY_GROUP="sg-04371316571a0bf71"
-VOLUME_SIZE=200
 TAG_NAME="vraiti-$(date +%Y%m%d)-vllm_omni-${SSH_ALIAS}"
 
 echo "Looking up AMI..."
 AMI_ID=$(aws ec2 describe-images \
     --owners self \
-    --filters "Name=tag:Name,Values=vraiti-rhel10-cuda" \
+    --filters "Name=tag:Name,Values=$AMI_NAME" \
     --query 'Images[0].ImageId' \
     --output text)
 
 if [[ "$AMI_ID" == "None" || -z "$AMI_ID" ]]; then
-    echo "ERROR: AMI 'vraiti-rhel10-cuda' not found" >&2
+    echo "ERROR: AMI '$AMI_NAME' not found" >&2
     exit 1
 fi
 echo "AMI: $AMI_ID"
@@ -40,8 +38,9 @@ INSTANCE_ID=$(aws_retry_on_capacity aws ec2 run-instances \
     --instance-type "$INSTANCE_TYPE" \
     --key-name "$KEY_NAME" \
     --security-group-ids "$SECURITY_GROUP" \
-    --block-device-mappings "DeviceName=/dev/sda1,Ebs={VolumeSize=$VOLUME_SIZE,VolumeType=gp3}" \
-    --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$TAG_NAME}]" \
+    --iam-instance-profile "Name=$IAM_INSTANCE_PROFILE" \
+    --block-device-mappings "DeviceName=/dev/sda1,Ebs={VolumeSize=$ROOT_VOLUME_SIZE,VolumeType=gp3}" \
+    --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$TAG_NAME},{Key=Project,Value=$PROJECT_TAG},{Key=ssh-alias,Value=$SSH_ALIAS}]" \
     --query 'Instances[0].InstanceId' \
     --output text)
 
@@ -49,21 +48,14 @@ echo "Instance: $INSTANCE_ID"
 echo "Waiting for instance to reach running state..."
 aws ec2 wait instance-running --instance-ids "$INSTANCE_ID"
 
-PUBLIC_IP=$(aws ec2 describe-instances \
-    --instance-ids "$INSTANCE_ID" \
-    --query 'Reservations[0].Instances[0].PublicIpAddress' \
-    --output text)
-
-echo "Public IP: $PUBLIC_IP"
 mkdir -p ~/.ssh/config.d
-ssh-keygen -R "$PUBLIC_IP" 2>/dev/null || true
 cat > ~/.ssh/config.d/"$SSH_ALIAS" <<EOF
-# state: running
 Host ${SSH_ALIAS}
-    HostName ${PUBLIC_IP}
+    HostName ${INSTANCE_ID}
     User ec2-user
     IdentityFile ~/.ssh/vraiti-ed25519.pem
     StrictHostKeyChecking accept-new
+    ProxyCommand sh -c "aws ssm start-session --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p"
 EOF
 
 bash "$SCRIPT_DIR/poll-ssh.sh" "$SSH_ALIAS"
@@ -78,9 +70,9 @@ else
     REMOTE_ROOT="$(ssh "$SSH_ALIAS" "echo $REMOTE_ROOT")"
 
     echo "Syncing repos to $SSH_ALIAS..."
-    bash "$SCRIPT_DIR/sync-remote.sh" "$SSH_ALIAS" "$REMOTE_ROOT"
+    bash "$SCRIPT_DIR/../sync-remote.sh" "$SSH_ALIAS" "$REMOTE_ROOT"
 
-    scp "$SCRIPT_DIR/install-shutdown-hook.sh" "$SCRIPT_DIR/create-venv.sh" "$SSH_ALIAS:/tmp/"
+    scp "$SCRIPT_DIR/../install-shutdown-hook.sh" "$SCRIPT_DIR/../create-venv.sh" "$SSH_ALIAS:/tmp/"
 
     echo "Running install-shutdown-hook.sh on $SSH_ALIAS..."
     ssh "$SSH_ALIAS" bash /tmp/install-shutdown-hook.sh

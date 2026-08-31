@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 source "$SCRIPT_DIR/aws-retry.sh"
+source "$SCRIPT_DIR/aws-config.sh"
 
 usage() {
     cat <<EOF
@@ -12,11 +13,18 @@ Commands:
   create <instance-type> [alias] [--raw]
                                     Launch a new instance (alias defaults to 'aws').
                                     --raw skips running install-shutdown-hook.sh.
+  create-raw <instance-type> [alias]
+                                    Launch straight from Red Hat's official RHEL 10
+                                    AMI and provision it (NVIDIA driver, CUDA
+                                    toolkit, DLAMI NVMe/cache setup, SSM Agent)
+                                    to match the $AMI_NAME base state via
+                                    create-from-rhel10-ami.sh. Run 'snapshot'
+                                    afterward to publish it as $AMI_NAME.
   start [alias]                    Start the stopped instance and poll for SSH
   stop [alias]                     Stop the running instance
   delete [alias]                   Terminate the instance and remove SSH config
   mv <old-alias> <new-alias>       Re-alias the instance locally
-  ls                               List SSH config entries in ~/.ssh/config.d/
+  ls                               List tagged instances (alias, state, id) live from AWS
   snapshot <alias>                 Snapshot the instance's root and cache EBS
                                     volumes and republish them as the
                                     $AMI_NAME AMI
@@ -26,9 +34,6 @@ Commands:
 EOF
     exit 1
 }
-
-AMI_NAME="vraiti-rhel10-cuda"
-CACHE_DEVICE_NAME="/dev/sdf"
 
 INSTANCE_ALIAS="aws"
 SSH_CONFIG="$HOME/.ssh/config.d/$INSTANCE_ALIAS"
@@ -41,37 +46,45 @@ set_alias() {
 }
 
 get_instance_id() {
-    local ip
-    ip=$(grep 'HostName' "$SSH_CONFIG" | head -1 | awk '{print $2}')
-
     local id
     id=$(aws ec2 describe-instances \
-        --filters "Name=ip-address,Values=$ip" \
+        --filters "Name=tag:ssh-alias,Values=$INSTANCE_ALIAS" \
+                  "Name=instance-state-name,Values=running,stopped,pending" \
         --query 'Reservations[0].Instances[0].InstanceId' \
         --output text 2>/dev/null)
 
     if [[ "$id" == "None" || -z "$id" ]]; then
-        id=$(aws ec2 describe-instances \
-            --filters "Name=tag:Name,Values=*vllm_omni*" \
-                      "Name=instance-state-name,Values=running,stopped,pending" \
-            --query 'Reservations[0].Instances[0].InstanceId' \
-            --output text 2>/dev/null)
-    fi
-
-    if [[ "$id" == "None" || -z "$id" ]]; then
-        echo "ERROR: could not find instance" >&2
+        echo "ERROR: could not find instance tagged ssh-alias=$INSTANCE_ALIAS" >&2
         exit 1
     fi
     echo "$id"
 }
 
-set_state() {
-    local config="$1" state="$2"
-    if grep -q '^# state:' "$config"; then
-        sed -i "s/^# state:.*$/# state: $state/" "$config"
-    else
-        sed -i "1i# state: $state" "$config"
+alias_exists_in_aws() {
+    local id
+    id=$(aws ec2 describe-instances \
+        --filters "Name=tag:ssh-alias,Values=$INSTANCE_ALIAS" \
+                  "Name=instance-state-name,Values=running,stopped,pending,stopping" \
+        --query 'Reservations[0].Instances[0].InstanceId' \
+        --output text 2>/dev/null)
+    [[ "$id" != "None" && -n "$id" ]]
+}
+
+# The local ~/.ssh/config.d/<alias> file is not a source of truth -- if the
+# instance was deleted out-of-band (console, another machine, `aws ec2
+# terminate-instances` directly), the file goes stale. Reconcile against AWS
+# before treating an existing file as "alias in use".
+check_alias_available() {
+    if [[ ! -f "$SSH_CONFIG" ]]; then
+        return
     fi
+    if alias_exists_in_aws; then
+        echo "ERROR: alias '$INSTANCE_ALIAS' already exists" >&2
+        exit 1
+    fi
+    echo "Alias '$INSTANCE_ALIAS' has no matching AWS instance (deleted out-of-band); removing stale $SSH_CONFIG"
+    rm -f "$SSH_CONFIG"
+    fusermount -u "/tmp/logs/$INSTANCE_ALIAS" 2>/dev/null || true
 }
 
 setup_sshfs() {
@@ -108,16 +121,150 @@ cmd_create() {
     pushd "$project_dir" > /dev/null
     trap 'popd > /dev/null' EXIT
 
-    if [[ -f "$SSH_CONFIG" ]]; then
-        echo "ERROR: alias '$INSTANCE_ALIAS' already exists" >&2
-        exit 1
-    fi
+    check_alias_available
     if [[ "$raw" -eq 1 ]]; then
         bash "$SCRIPT_DIR/launch-instance.sh" "$instance_type" "$INSTANCE_ALIAS" --raw
     else
         bash "$SCRIPT_DIR/launch-instance.sh" "$instance_type" "$INSTANCE_ALIAS"
     fi
     setup_sshfs
+}
+
+cmd_create_raw() {
+    local instance_type="${1:?Usage: $0 create-raw <instance-type> [alias]}"
+    set_alias "${2:-}"
+
+    check_alias_available
+
+    echo "Looking up Red Hat's official RHEL 10 AMI..."
+    local ami_info
+    ami_info=$(aws ec2 describe-images \
+        --owners "$RHEL10_AMI_OWNER" \
+        --filters "Name=name,Values=RHEL-10*x86_64*" "Name=state,Values=available" \
+        --query 'sort_by(Images, &CreationDate)[-1].[ImageId,RootDeviceName]' \
+        --output text)
+    local ami_id root_device_name
+    read -r ami_id root_device_name <<< "$ami_info"
+    if [[ "$ami_id" == "None" || -z "$ami_id" ]]; then
+        echo "ERROR: could not find a RHEL 10 AMI owned by $RHEL10_AMI_OWNER" >&2
+        exit 1
+    fi
+    echo "AMI: $ami_id (root device: $root_device_name)"
+
+    local tag_name="vraiti-$(date +%Y%m%d)-vllm_omni-${INSTANCE_ALIAS}"
+
+    echo "Launching $instance_type instance..."
+    local id
+    id=$(aws_retry_on_capacity aws ec2 run-instances \
+        --image-id "$ami_id" \
+        --instance-type "$instance_type" \
+        --key-name "$KEY_NAME" \
+        --security-group-ids "$SECURITY_GROUP" \
+        --iam-instance-profile "Name=$IAM_INSTANCE_PROFILE" \
+        --block-device-mappings \
+            "DeviceName=$root_device_name,Ebs={VolumeSize=$ROOT_VOLUME_SIZE,VolumeType=gp3}" \
+            "DeviceName=$CACHE_DEVICE_NAME,Ebs={VolumeSize=$CACHE_VOLUME_SIZE,VolumeType=gp3}" \
+        --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$tag_name},{Key=Project,Value=$PROJECT_TAG},{Key=ssh-alias,Value=$INSTANCE_ALIAS}]" \
+        --query 'Instances[0].InstanceId' \
+        --output text)
+
+    echo "Instance: $id"
+    echo "Waiting for instance to reach running state..."
+    aws ec2 wait instance-running --instance-ids "$id"
+
+    # The base RHEL AMI has no SSM Agent yet (that's installed by
+    # create-from-rhel10-ami.sh itself, in phase 2) so the usual SSM
+    # ProxyCommand alias can't be used to bootstrap it -- fall back to a
+    # direct public-IP SSH connection for everything up through phase 2.
+    local public_ip
+    public_ip=$(aws ec2 describe-instances \
+        --instance-ids "$id" \
+        --query 'Reservations[0].Instances[0].PublicIpAddress' \
+        --output text)
+    if [[ "$public_ip" == "None" || -z "$public_ip" ]]; then
+        echo "ERROR: instance has no public IP to bootstrap over" >&2
+        exit 1
+    fi
+    echo "Public IP: $public_ip"
+    ssh-keygen -R "$public_ip" 2>/dev/null || true
+
+    local bootstrap_ssh_opts=(
+        -o BatchMode=yes
+        -o StrictHostKeyChecking=accept-new
+        -o ServerAliveInterval=5
+        -o ServerAliveCountMax=2
+        -i ~/.ssh/vraiti-ed25519.pem
+    )
+    local bootstrap_host="ec2-user@$public_ip"
+
+    echo "Polling SSH readiness (direct, pre-SSM)..."
+    local ready=0
+    for ((i = 1; i <= 60; i++)); do
+        if ssh -o ConnectTimeout=5 "${bootstrap_ssh_opts[@]}" "$bootstrap_host" true 2>/dev/null; then
+            ready=1
+            break
+        fi
+        echo "Attempt $i/60 — SSH not ready, retrying in 5s..."
+        sleep 5
+    done
+    if [[ "$ready" -ne 1 ]]; then
+        echo "ERROR: SSH did not become ready after 300s" >&2
+        exit 1
+    fi
+
+    echo "Uploading create-from-rhel10-ami.sh..."
+    scp "${bootstrap_ssh_opts[@]}" "$SCRIPT_DIR/create-from-rhel10-ami.sh" "$bootstrap_host:/tmp/"
+
+    echo "Running phase 1 (driver install + reboot)..."
+    ssh "${bootstrap_ssh_opts[@]}" "$bootstrap_host" "sudo bash /tmp/create-from-rhel10-ami.sh" || true
+
+    echo "Waiting for reboot..."
+    sleep 15
+    ready=0
+    for ((i = 1; i <= 60; i++)); do
+        if ssh -o ConnectTimeout=5 "${bootstrap_ssh_opts[@]}" "$bootstrap_host" true 2>/dev/null; then
+            ready=1
+            break
+        fi
+        echo "Attempt $i/60 — SSH not ready, retrying in 5s..."
+        sleep 5
+    done
+    if [[ "$ready" -ne 1 ]]; then
+        echo "ERROR: SSH did not come back after reboot after 300s" >&2
+        exit 1
+    fi
+
+    echo "Waiting for provisioning to complete (phase 2 runs automatically on boot)..."
+    local complete=0
+    for ((i = 1; i <= 60; i++)); do
+        if ssh "${bootstrap_ssh_opts[@]}" "$bootstrap_host" "test -f /var/lib/vllm-omni-rhel10-provision-complete" 2>/dev/null; then
+            complete=1
+            break
+        fi
+        echo "Attempt $i/60 — still provisioning, retrying in 10s..."
+        sleep 10
+    done
+    if [[ "$complete" -ne 1 ]]; then
+        echo "ERROR: provisioning did not complete after 600s; check ec2-user@$public_ip manually" >&2
+        exit 1
+    fi
+
+    # Only now (post phase-2) is the SSM Agent installed and running, so
+    # only now does the usual SSM-based alias become usable.
+    mkdir -p ~/.ssh/config.d
+    cat > "$SSH_CONFIG" <<EOF
+Host ${SSH_ALIAS}
+    HostName ${id}
+    User ec2-user
+    IdentityFile ~/.ssh/vraiti-ed25519.pem
+    StrictHostKeyChecking accept-new
+    ProxyCommand sh -c "aws ssm start-session --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p"
+EOF
+
+    echo ""
+    echo "Instance: $id"
+    echo "SSH:      ssh $SSH_ALIAS"
+    echo "Provisioning complete. Run '$0 snapshot $INSTANCE_ALIAS' to publish it as $AMI_NAME."
 }
 
 cmd_mv() {
@@ -135,20 +282,12 @@ cmd_mv() {
         exit 1
     fi
 
-    local ip
-    ip=$(grep 'HostName' "$old_config" | head -1 | awk '{print $2}')
     local id
     id=$(aws ec2 describe-instances \
-        --filters "Name=ip-address,Values=$ip" \
+        --filters "Name=tag:ssh-alias,Values=$old_alias" \
+                  "Name=instance-state-name,Values=running,stopped,pending" \
         --query 'Reservations[0].Instances[0].InstanceId' \
         --output text 2>/dev/null)
-    if [[ "$id" == "None" || -z "$id" ]]; then
-        id=$(aws ec2 describe-instances \
-            --filters "Name=tag:Name,Values=*vllm_omni*" \
-                      "Name=instance-state-name,Values=running,stopped,pending" \
-            --query 'Reservations[0].Instances[0].InstanceId' \
-            --output text 2>/dev/null)
-    fi
 
     if [[ "$id" != "None" && -n "$id" ]]; then
         local old_name
@@ -157,8 +296,9 @@ cmd_mv() {
             --query 'Tags[0].Value' --output text 2>/dev/null)
         local new_name="${old_name%-*}-${new_alias}"
         aws ec2 create-tags --resources "$id" \
-            --tags "Key=Name,Value=$new_name"
+            --tags "Key=Name,Value=$new_name" "Key=ssh-alias,Value=$new_alias"
         echo "AWS Name: '$old_name' -> '$new_name'"
+        echo "AWS Tag ssh-alias: '$old_alias' -> '$new_alias'"
     else
         echo "WARNING: could not find AWS instance to rename tag" >&2
     fi
@@ -179,12 +319,12 @@ cmd_mv() {
 }
 
 cmd_ls() {
-    for f in ~/.ssh/config.d/*; do
-        [[ -f "$f" ]] || continue
-        local name state
-        name=$(basename "$f")
-        state=$(grep -oP '^# state: \K.*' "$f" 2>/dev/null || echo "unknown")
-        printf "%-20s %s\n" "$name" "$state"
+    aws ec2 describe-instances \
+        --filters "Name=tag:Project,Values=$PROJECT_TAG" \
+                  "Name=instance-state-name,Values=running,stopped,pending,stopping" \
+        --query 'Reservations[].Instances[].[Tags[?Key==`ssh-alias`]|[0].Value,State.Name,InstanceId]' \
+        --output text | while read -r alias state id; do
+        printf "%-20s %-10s %s\n" "$alias" "$state" "$id"
     done
 }
 
@@ -198,7 +338,6 @@ cmd_stop() {
     echo "Waiting for stopped state..."
     aws ec2 wait instance-stopped --instance-ids "$id"
 
-    set_state "$SSH_CONFIG" "stopped"
     echo "Instance stopped."
 }
 
@@ -212,24 +351,12 @@ cmd_start() {
     echo "Waiting for running state..."
     aws ec2 wait instance-running --instance-ids "$id"
 
-    local new_ip
-    new_ip=$(aws ec2 describe-instances \
-        --instance-ids "$id" \
-        --query 'Reservations[0].Instances[0].PublicIpAddress' \
-        --output text)
-    echo "Public IP: $new_ip"
-
-    ssh-keygen -R "$new_ip" 2>/dev/null || true
-    sed -i "s/HostName .*/HostName $new_ip/" "$SSH_CONFIG"
-
     bash "$SCRIPT_DIR/poll-ssh.sh" "$SSH_ALIAS"
 
-    set_state "$SSH_CONFIG" "running"
     setup_sshfs
 
     echo ""
     echo "Instance: $id"
-    echo "IP:       $new_ip"
     echo "SSH:      ssh $SSH_ALIAS"
 }
 
@@ -277,6 +404,7 @@ shift || true
 
 case "$COMMAND" in
     create)         cmd_create "$@" ;;
+    create-raw)     cmd_create_raw "$@" ;;
     start)          cmd_start "$@" ;;
     stop)           cmd_stop "$@" ;;
     delete)         cmd_delete "$@" ;;

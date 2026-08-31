@@ -55,6 +55,32 @@ def create_snapshot(volume_id: str, name: str, description: str) -> str:
     return out["SnapshotId"]
 
 
+def wait_for_snapshots(snapshot_ids: list[str], poll_seconds: int = 15,
+                        timeout_seconds: int = 3600) -> None:
+    # The AWS CLI's own `wait snapshot-completed` gives up after 40 attempts
+    # at 15s each (10 minutes total), which a fresh multi-hundred-GB root
+    # volume's first (non-incremental) snapshot can easily exceed. Poll
+    # directly instead, with a much longer ceiling.
+    deadline = time.monotonic() + timeout_seconds
+    pending = set(snapshot_ids)
+    while pending:
+        if time.monotonic() > deadline:
+            raise RuntimeError(
+                f"snapshots did not complete within {timeout_seconds}s: {sorted(pending)}")
+        snapshots = aws_json(
+            "ec2", "describe-snapshots", "--snapshot-ids", *pending,
+        )["Snapshots"]
+        for snap in snapshots:
+            state = snap["State"]
+            if state == "completed":
+                pending.discard(snap["SnapshotId"])
+            elif state == "error":
+                raise RuntimeError(f"snapshot {snap['SnapshotId']} failed: {snap}")
+        if pending:
+            print(f"  still pending: {sorted(pending)} ({poll_seconds}s)...")
+            time.sleep(poll_seconds)
+
+
 def ebs_mapping_from_image(image: dict, device_name: str) -> dict:
     for mapping in image["BlockDeviceMappings"]:
         if mapping["DeviceName"] == device_name:
@@ -115,8 +141,7 @@ def main() -> int:
         snapshot_ids_to_await.append(root_snapshot_id)
 
     print("Waiting for snapshots to complete (this can take a while)...")
-    aws("ec2", "wait", "snapshot-completed",
-        "--snapshot-ids", *snapshot_ids_to_await)
+    wait_for_snapshots(snapshot_ids_to_await)
 
     old_cache_mapping = ebs_mapping_from_image(old_image, args.cache_device)
 
