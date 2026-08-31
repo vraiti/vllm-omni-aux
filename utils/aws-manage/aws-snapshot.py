@@ -236,7 +236,7 @@ def main() -> int:
     if root_snapshot_id is not None:
         print(f"Root snapshot:  {root_snapshot_id}")
     print(f"Cache snapshot: {cache_snapshot_id}")
-    print(f"Old AMI {old_ami_id} deregistered; its snapshots were left in place.")
+    print(f"Old AMI {old_ami_id} deregistered; its now-orphaned snapshots were garbage-collected above.")
     return 0
 
 
