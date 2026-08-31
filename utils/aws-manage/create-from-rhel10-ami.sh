@@ -319,6 +319,21 @@ function link_home_cache {
   ln -sfn "${CACHE_DIR}" "${HOME_CACHE}"
   chown -h ec2-user:ec2-user "${HOME_CACHE}"
   log "Linked ${HOME_CACHE} -> ${CACHE_DIR}"
+
+  # Runtime kernel-compiler caches (~/.nv, ~/.triton, ~/.humming) live
+  # directly under $HOME, not under ~/.cache -- confirmed populated after
+  # actually running vllm serve (NVIDIA compute cache, Triton JIT cache,
+  # and an NVRTC-compile cache respectively). EBS-back them the same way so
+  # a stop/start (or a fresh instance built from a snapshot) doesn't force
+  # re-JIT-compiling every kernel from scratch.
+  HOME_DIR="/home/ec2-user"
+  for NAME in .nv .triton .humming; do
+    mkdir -p "${EBS_CACHE_DIR}/${NAME}"
+    chown ec2-user:ec2-user "${EBS_CACHE_DIR}/${NAME}"
+    rm -rf "${HOME_DIR}/${NAME}"
+    ln -sfn "${EBS_CACHE_DIR}/${NAME}" "${HOME_DIR}/${NAME}"
+    chown -h ec2-user:ec2-user "${HOME_DIR}/${NAME}"
+  done
 }
 
 function setup_scratch_dirs {
