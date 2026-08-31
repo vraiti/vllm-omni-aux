@@ -129,7 +129,7 @@ fi
 report_pushes() {
     for i in "${!PUSH_PIDS[@]}"; do
         if wait "${PUSH_PIDS[$i]}"; then
-            echo "git push (${PUSH_REPO_NAMES[$i]}): OK"
+            :
         else
             echo "git push (${PUSH_REPO_NAMES[$i]}) FAILED:" >&2
             cat "$PUSH_LOG_DIR/${PUSH_REPO_NAMES[$i]}.log" >&2
