@@ -81,9 +81,8 @@ while IFS= read -r entry <&3 || [[ -n "$entry" ]]; do
         ssh "$SSH_ALIAS" "echo $(printf '%q' "$local_head") > $(printf '%q' "$marker_path")"
     else
         # No commit to export from -- fall back to syncing the working
-        # directory directly, still gitignore-filtered if one exists.
-        rsync -az --delete --exclude=.git --exclude=.rrr-synced-commit \
-            --filter=':- .gitignore' \
+        # directory directly.
+        rsync -az --delete --exclude=.rrr-synced-commit \
             "$repo_dir/" "$SSH_ALIAS:$REMOTE_ROOT/$repo_name/"
     fi
 done 3< "$REPOS_FILE"
