@@ -64,16 +64,26 @@ while IFS= read -r entry <&3 || [[ -n "$entry" ]]; do
     fi
 
     echo "Syncing $repo_name..."
-    # ':- .gitignore' merges each directory's .gitignore in as rsync excludes
-    # while descending -- without this, rsync copies everything regardless
-    # of gitignore, including large local-only build artifacts (e.g. a
-    # 1GB+ node_modules under vllm-omni's examples/) that have no business
-    # being synced to a remote instance.
-    rsync -az --delete --exclude=.git --exclude=.rrr-synced-commit \
-        --filter=':- .gitignore' \
-        "$repo_dir/" "$SSH_ALIAS:$REMOTE_ROOT/$repo_name/"
-
     if [[ -e "$repo_dir/.git" ]]; then
+        # Export exactly the committed tree at HEAD (via `git archive`) and
+        # rsync --delete *that*, rather than the working directory --
+        # gitignore-filtering the working directory still lets any
+        # untracked-but-not-ignored file through, which is how a stray
+        # `npm install` (e.g. agent-starter-react's 1GB+ node_modules,
+        # already gitignored, but this closes the gap for anything that
+        # ISN'T) could still end up on the remote. The archive only ever
+        # contains what's actually committed.
+        archive_dir="$(mktemp -d)"
+        git -C "$repo_dir" archive "$local_head" | tar -x -C "$archive_dir"
+        rsync -az --delete --exclude=.rrr-synced-commit \
+            "$archive_dir/" "$SSH_ALIAS:$REMOTE_ROOT/$repo_name/"
+        rm -rf "$archive_dir"
         ssh "$SSH_ALIAS" "echo $(printf '%q' "$local_head") > $(printf '%q' "$marker_path")"
+    else
+        # No commit to export from -- fall back to syncing the working
+        # directory directly, still gitignore-filtered if one exists.
+        rsync -az --delete --exclude=.git --exclude=.rrr-synced-commit \
+            --filter=':- .gitignore' \
+            "$repo_dir/" "$SSH_ALIAS:$REMOTE_ROOT/$repo_name/"
     fi
 done 3< "$REPOS_FILE"
