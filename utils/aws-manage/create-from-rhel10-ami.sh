@@ -72,7 +72,10 @@ UNIT
 fi
 
 echo "=== Phase 2: toolkit, cache volume, dlami-nvme, SSM agent ==="
-dnf install -y python3-pip python3-devel cuda-toolkit git lvm2
+# mesa-libGL provides libGL.so.1, an import-time dependency of opencv-python
+# (pulled in by vllm-omni for its multimodal/video pipeline) that RHEL 10
+# minimal doesn't ship by default.
+dnf install -y python3-pip python3-devel cuda-toolkit git lvm2 mesa-libGL
 
 # cuda-toolkit's rpm doesn't add itself to PATH (that's expected NVIDIA
 # behavior, not something the package handles) -- without this, nvcc and
