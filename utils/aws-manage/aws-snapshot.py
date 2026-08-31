@@ -81,6 +81,44 @@ def wait_for_snapshots(snapshot_ids: list[str], poll_seconds: int = 15,
             time.sleep(poll_seconds)
 
 
+def gc_orphaned_snapshots(ami_name: str) -> None:
+    # Every snapshot/register-image cycle leaves the *previous* generation's
+    # root+cache snapshots behind on purpose (register-image needs them to
+    # exist until the new AMI is confirmed working) -- but once a new AMI is
+    # successfully tagged, anything with this AMI's naming scheme that isn't
+    # referenced by *any* current self-owned AMI is just accumulating
+    # storage cost. Scoped to this ami_name's tag prefix specifically so a
+    # shared account's other snapshots are never touched.
+    print("Garbage-collecting orphaned snapshots...")
+    candidates = aws_json(
+        "ec2", "describe-snapshots", "--owner-ids", "self",
+        "--filters", f"Name=tag:Name,Values={ami_name}-*",
+    )["Snapshots"]
+    if not candidates:
+        print("  none found.")
+        return
+
+    images = aws_json("ec2", "describe-images", "--owners", "self")["Images"]
+    referenced = {
+        mapping["Ebs"]["SnapshotId"]
+        for image in images
+        for mapping in image.get("BlockDeviceMappings", [])
+        if "Ebs" in mapping and "SnapshotId" in mapping["Ebs"]
+    }
+
+    orphaned = [s["SnapshotId"] for s in candidates if s["SnapshotId"] not in referenced]
+    if not orphaned:
+        print("  none found.")
+        return
+
+    for snapshot_id in orphaned:
+        try:
+            aws("ec2", "delete-snapshot", "--snapshot-id", snapshot_id)
+            print(f"  deleted {snapshot_id}")
+        except RuntimeError as exc:
+            print(f"  WARNING: could not delete {snapshot_id}: {exc}", file=sys.stderr)
+
+
 def ebs_mapping_from_image(image: dict, device_name: str) -> dict:
     for mapping in image["BlockDeviceMappings"]:
         if mapping["DeviceName"] == device_name:
@@ -186,6 +224,8 @@ def main() -> int:
 
     aws("ec2", "create-tags", "--resources", new_ami_id,
         "--tags", f"Key=Name,Value={args.ami_name}")
+
+    gc_orphaned_snapshots(args.ami_name)
 
     print()
     print(f"New AMI:      {new_ami_id}")
