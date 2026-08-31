@@ -114,6 +114,12 @@ if [[ -f "$PROJECT_DIR/repos.txt" ]]; then
         repo_name="${entry%%:*}"
         repo_dir="$PROJECT_DIR/$repo_name"
         [[ -d "$repo_dir/.git" ]] || continue
+        # Site-package repos (e.g. vllm) are intentionally pinned to a
+        # detached HEAD at a specific upstream commit -- nothing to push,
+        # and `git push` there is a hard error, not a real failure.
+        if ! git -C "$repo_dir" symbolic-ref -q HEAD >/dev/null 2>&1; then
+            continue
+        fi
         git -C "$repo_dir" push > "$PUSH_LOG_DIR/$repo_name.log" 2>&1 &
         PUSH_PIDS+=("$!")
         PUSH_REPO_NAMES+=("$repo_name")

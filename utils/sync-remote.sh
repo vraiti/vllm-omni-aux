@@ -64,7 +64,13 @@ while IFS= read -r entry <&3 || [[ -n "$entry" ]]; do
     fi
 
     echo "Syncing $repo_name..."
-    rsync -az --delete --exclude=.rrr-synced-commit \
+    # ':- .gitignore' merges each directory's .gitignore in as rsync excludes
+    # while descending -- without this, rsync copies everything regardless
+    # of gitignore, including large local-only build artifacts (e.g. a
+    # 1GB+ node_modules under vllm-omni's examples/) that have no business
+    # being synced to a remote instance.
+    rsync -az --delete --exclude=.git --exclude=.rrr-synced-commit \
+        --filter=':- .gitignore' \
         "$repo_dir/" "$SSH_ALIAS:$REMOTE_ROOT/$repo_name/"
 
     if [[ -e "$repo_dir/.git" ]]; then

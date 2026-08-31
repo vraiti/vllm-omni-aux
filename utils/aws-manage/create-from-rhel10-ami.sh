@@ -89,6 +89,12 @@ source /etc/profile.d/cuda.sh
 echo "Verifying NVIDIA driver..."
 nvidia-smi
 
+# ec2-user's default non-interactive-shell PATH already includes
+# ~/.local/bin (confirmed via `ssh host env`), so installing here needs no
+# separate PATH/profile.d fix, unlike cuda-toolkit above.
+echo "Installing uv..."
+sudo -u ec2-user bash -c 'curl -LsSf https://astral.sh/uv/install.sh | sh'
+
 echo "Setting up persistent cache EBS volume..."
 # Match by size (not just "first non-root disk") -- larger instance types
 # also have local ephemeral NVMe instance-store disks (handled separately
