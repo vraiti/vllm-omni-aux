@@ -74,8 +74,10 @@ fi
 echo "=== Phase 2: toolkit, cache volume, dlami-nvme, SSM agent ==="
 # mesa-libGL provides libGL.so.1, an import-time dependency of opencv-python
 # (pulled in by vllm-omni for its multimodal/video pipeline) that RHEL 10
-# minimal doesn't ship by default.
-dnf install -y python3-pip python3-devel cuda-toolkit git lvm2 mesa-libGL
+# minimal doesn't ship by default. sqlite-devel provides sqlite3.h, needed
+# to build CPython (e.g. python-tracer's cpython submodule) with sqlite
+# support.
+dnf install -y python3-pip python3-devel cuda-toolkit git lvm2 mesa-libGL sqlite-devel
 
 # cuda-toolkit's rpm doesn't add itself to PATH (that's expected NVIDIA
 # behavior, not something the package handles) -- without this, nvcc and
