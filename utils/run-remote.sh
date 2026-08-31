@@ -174,7 +174,7 @@ HF_TOKEN=$(cat ~/.secret/hf)
 # than passing activate/exec/env as separate ssh arguments -- an env-var
 # prefix (VAR=val cmd1 && cmd2) only applies to cmd1, not cmd2, so HF_TOKEN
 # must be `export`ed inside the string, not passed as a leading ssh arg.
-REMOTE_SHELL_CMD="$(printf 'export HF_TOKEN=%q; source %q/%q/bin/activate && %q' "$HF_TOKEN" "$REMOTE_ROOT" "$VENV_NAME" "$REMOTE_CMD")"
+REMOTE_SHELL_CMD="$(printf 'export HF_TOKEN=%q; cd %q && source %q/bin/activate && %q' "$HF_TOKEN" "$REMOTE_ROOT" "$VENV_NAME" "$REMOTE_CMD")"
 for arg in "$@"; do
     REMOTE_SHELL_CMD+="$(printf ' %q' "$arg")"
 done
