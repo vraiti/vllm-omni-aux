@@ -99,6 +99,40 @@ while [[ "$PROJECT_DIR" != "$HOME/omni" && "$PROJECT_DIR" != "/" ]]; do
     PROJECT_DIR="$(dirname "$PROJECT_DIR")"
 done
 
+# Push each repo listed in repos.txt to its git remote in the background --
+# started here (before the potentially-slow sync/venv/deploy work below) and
+# collected right before this script exits, so a slow/stalled `git push`
+# never blocks the actual remote work, but its result is still surfaced.
+PUSH_LOG_DIR="$(mktemp -d)"
+PUSH_PIDS=()
+PUSH_REPO_NAMES=()
+if [[ -f "$PROJECT_DIR/repos.txt" ]]; then
+    while IFS= read -r entry <&3 || [[ -n "$entry" ]]; do
+        entry="${entry%%#*}"
+        entry="${entry// /}"
+        [[ -z "$entry" ]] && continue
+        repo_name="${entry%%:*}"
+        repo_dir="$PROJECT_DIR/$repo_name"
+        [[ -d "$repo_dir/.git" ]] || continue
+        git -C "$repo_dir" push > "$PUSH_LOG_DIR/$repo_name.log" 2>&1 &
+        PUSH_PIDS+=("$!")
+        PUSH_REPO_NAMES+=("$repo_name")
+    done 3< "$PROJECT_DIR/repos.txt"
+fi
+
+report_pushes() {
+    for i in "${!PUSH_PIDS[@]}"; do
+        if wait "${PUSH_PIDS[$i]}"; then
+            echo "git push (${PUSH_REPO_NAMES[$i]}): OK"
+        else
+            echo "git push (${PUSH_REPO_NAMES[$i]}) FAILED:" >&2
+            cat "$PUSH_LOG_DIR/${PUSH_REPO_NAMES[$i]}.log" >&2
+        fi
+    done
+    rm -rf "$PUSH_LOG_DIR"
+}
+trap report_pushes EXIT
+
 bash "$SCRIPT_DIR/sync-remote.sh" "$SSH_ALIAS" "$REMOTE_ROOT" "$PROJECT_DIR"
 
 REMOTE_VENV_DIR="$REMOTE_ROOT/$VENV_NAME"
