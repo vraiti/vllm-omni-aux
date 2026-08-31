@@ -26,6 +26,30 @@ if [[ ! -f "$REPOS_FILE" ]]; then
     exit 1
 fi
 
+# `git archive` only emits an empty directory for a submodule path (it's a
+# gitlink, not real content) -- without this, a repo with an initialized
+# submodule (e.g. python-tracer's cpython) would silently sync an empty
+# directory instead of the submodule's actual files. Recurses to handle
+# submodules-of-submodules too.
+archive_repo_tree() {
+    local repo_dir="$1" commit="$2" dest_dir="$3"
+    git -C "$repo_dir" archive "$commit" | tar -x -C "$dest_dir"
+
+    while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        # `git submodule status` lines: "[-+ ]<sha> <path> [(<describe>)]"
+        [[ "${line:0:1}" == "-" ]] && continue  # not initialized, nothing to sync
+        local sub_path sub_commit
+        sub_path="$(awk '{print $2}' <<< "$line")"
+        sub_commit="$(awk '{print $1}' <<< "$line" | tr -d '+-')"
+        if [[ -n "$(git -C "$repo_dir/$sub_path" status --porcelain)" ]]; then
+            echo "ERROR: $repo_dir/$sub_path has uncommitted changes" >&2
+            exit 1
+        fi
+        archive_repo_tree "$repo_dir/$sub_path" "$sub_commit" "$dest_dir/$sub_path"
+    done < <(git -C "$repo_dir" submodule status 2>/dev/null)
+}
+
 # Read from fd 3, not stdin: ssh/rsync inside this loop otherwise inherit
 # the loop's stdin redirect and drain the rest of repos.txt as if it were
 # their own input, silently truncating the loop after the first iteration
@@ -74,7 +98,7 @@ while IFS= read -r entry <&3 || [[ -n "$entry" ]]; do
         # ISN'T) could still end up on the remote. The archive only ever
         # contains what's actually committed.
         archive_dir="$(mktemp -d)"
-        git -C "$repo_dir" archive "$local_head" | tar -x -C "$archive_dir"
+        archive_repo_tree "$repo_dir" "$local_head" "$archive_dir"
         rsync -az --delete --exclude=.rrr-synced-commit \
             "$archive_dir/" "$SSH_ALIAS:$REMOTE_ROOT/$repo_name/"
         rm -rf "$archive_dir"
