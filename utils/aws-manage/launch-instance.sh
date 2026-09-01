@@ -38,7 +38,6 @@ INSTANCE_ID=$(aws_retry_on_capacity aws ec2 run-instances \
     --instance-type "$INSTANCE_TYPE" \
     --key-name "$KEY_NAME" \
     --security-group-ids "$SECURITY_GROUP" \
-    --iam-instance-profile "Name=$IAM_INSTANCE_PROFILE" \
     --block-device-mappings "DeviceName=/dev/sda1,Ebs={VolumeSize=$ROOT_VOLUME_SIZE,VolumeType=gp3}" \
     --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$TAG_NAME},{Key=Project,Value=$PROJECT_TAG},{Key=ssh-alias,Value=$SSH_ALIAS}]" \
     --query 'Instances[0].InstanceId' \
@@ -48,14 +47,20 @@ echo "Instance: $INSTANCE_ID"
 echo "Waiting for instance to reach running state..."
 aws ec2 wait instance-running --instance-ids "$INSTANCE_ID"
 
+PUBLIC_IP=$(aws ec2 describe-instances \
+    --instance-ids "$INSTANCE_ID" \
+    --query 'Reservations[0].Instances[0].PublicIpAddress' \
+    --output text)
+
+echo "Public IP: $PUBLIC_IP"
 mkdir -p ~/.ssh/config.d
+ssh-keygen -R "$PUBLIC_IP" 2>/dev/null || true
 cat > ~/.ssh/config.d/"$SSH_ALIAS" <<EOF
 Host ${SSH_ALIAS}
-    HostName ${INSTANCE_ID}
+    HostName ${PUBLIC_IP}
     User ec2-user
     IdentityFile ~/.ssh/vraiti-ed25519.pem
     StrictHostKeyChecking accept-new
-    ProxyCommand sh -c "aws ssm start-session --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p"
 EOF
 
 bash "$SCRIPT_DIR/poll-ssh.sh" "$SSH_ALIAS"

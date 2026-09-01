@@ -16,7 +16,7 @@ Commands:
   create-raw <instance-type> [alias]
                                     Launch straight from Red Hat's official RHEL 10
                                     AMI and provision it (NVIDIA driver, CUDA
-                                    toolkit, DLAMI NVMe/cache setup, SSM Agent)
+                                    toolkit, DLAMI NVMe/cache setup)
                                     to match the $AMI_NAME base state via
                                     create-from-rhel10-ami.sh. Run 'snapshot'
                                     afterward to publish it as $AMI_NAME.
@@ -160,7 +160,6 @@ cmd_create_raw() {
         --instance-type "$instance_type" \
         --key-name "$KEY_NAME" \
         --security-group-ids "$SECURITY_GROUP" \
-        --iam-instance-profile "Name=$IAM_INSTANCE_PROFILE" \
         --block-device-mappings \
             "DeviceName=$root_device_name,Ebs={VolumeSize=$ROOT_VOLUME_SIZE,VolumeType=gp3}" \
             "DeviceName=$CACHE_DEVICE_NAME,Ebs={VolumeSize=$CACHE_VOLUME_SIZE,VolumeType=gp3}" \
@@ -172,17 +171,13 @@ cmd_create_raw() {
     echo "Waiting for instance to reach running state..."
     aws ec2 wait instance-running --instance-ids "$id"
 
-    # The base RHEL AMI has no SSM Agent yet (that's installed by
-    # create-from-rhel10-ami.sh itself, in phase 2) so the usual SSM
-    # ProxyCommand alias can't be used to bootstrap it -- fall back to a
-    # direct public-IP SSH connection for everything up through phase 2.
     local public_ip
     public_ip=$(aws ec2 describe-instances \
         --instance-ids "$id" \
         --query 'Reservations[0].Instances[0].PublicIpAddress' \
         --output text)
     if [[ "$public_ip" == "None" || -z "$public_ip" ]]; then
-        echo "ERROR: instance has no public IP to bootstrap over" >&2
+        echo "ERROR: instance has no public IP" >&2
         exit 1
     fi
     echo "Public IP: $public_ip"
@@ -197,7 +192,7 @@ cmd_create_raw() {
     )
     local bootstrap_host="ec2-user@$public_ip"
 
-    echo "Polling SSH readiness (direct, pre-SSM)..."
+    echo "Polling SSH readiness..."
     local ready=0
     for ((i = 1; i <= 60; i++)); do
         if ssh -o ConnectTimeout=5 "${bootstrap_ssh_opts[@]}" "$bootstrap_host" true 2>/dev/null; then
@@ -249,16 +244,13 @@ cmd_create_raw() {
         exit 1
     fi
 
-    # Only now (post phase-2) is the SSM Agent installed and running, so
-    # only now does the usual SSM-based alias become usable.
     mkdir -p ~/.ssh/config.d
     cat > "$SSH_CONFIG" <<EOF
 Host ${SSH_ALIAS}
-    HostName ${id}
+    HostName ${public_ip}
     User ec2-user
     IdentityFile ~/.ssh/vraiti-ed25519.pem
     StrictHostKeyChecking accept-new
-    ProxyCommand sh -c "aws ssm start-session --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p"
 EOF
 
     echo ""
@@ -351,12 +343,23 @@ cmd_start() {
     echo "Waiting for running state..."
     aws ec2 wait instance-running --instance-ids "$id"
 
+    local new_ip
+    new_ip=$(aws ec2 describe-instances \
+        --instance-ids "$id" \
+        --query 'Reservations[0].Instances[0].PublicIpAddress' \
+        --output text)
+    echo "Public IP: $new_ip"
+
+    ssh-keygen -R "$new_ip" 2>/dev/null || true
+    sed -i "s/HostName .*/HostName $new_ip/" "$SSH_CONFIG"
+
     bash "$SCRIPT_DIR/poll-ssh.sh" "$SSH_ALIAS"
 
     setup_sshfs
 
     echo ""
     echo "Instance: $id"
+    echo "IP:       $new_ip"
     echo "SSH:      ssh $SSH_ALIAS"
 }
 

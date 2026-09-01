@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Provisions a bare Red Hat RHEL 10 AMI instance into exactly the state
 # launch-instance.sh expects from the "vraiti-rhel10-cuda" AMI: NVIDIA
-# driver + CUDA toolkit, the DLAMI ephemeral-NVMe mount/cache-symlink setup,
-# and the SSM Agent.
+# driver + CUDA toolkit and the DLAMI ephemeral-NVMe mount/cache-symlink
+# setup.
 #
 # Self-contained: scp this to the instance and run it once. It resumes
 # itself across the reboot the driver install requires (via a temporary
@@ -71,7 +71,7 @@ UNIT
     exit 0
 fi
 
-echo "=== Phase 2: toolkit, cache volume, dlami-nvme, SSM agent ==="
+echo "=== Phase 2: toolkit, cache volume, dlami-nvme ==="
 # mesa-libGL provides libGL.so.1, an import-time dependency of opencv-python
 # (pulled in by vllm-omni for its multimodal/video pipeline) that RHEL 10
 # minimal doesn't ship by default. sqlite-devel provides sqlite3.h, needed
@@ -372,12 +372,6 @@ UNIT
 
 systemctl daemon-reload
 systemctl enable --now dlami-nvme.service
-
-echo "Installing SSM Agent..."
-TOKEN=$(curl -s -X PUT http://169.254.169.254/latest/api/token -H 'X-aws-ec2-metadata-token-ttl-seconds: 60')
-REGION=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/placement/region)
-dnf install -y "https://s3.${REGION}.amazonaws.com/amazon-ssm-${REGION}/latest/linux_amd64/amazon-ssm-agent.rpm"
-systemctl enable --now amazon-ssm-agent
 
 echo "Cleaning up resume service..."
 systemctl disable vllm-omni-provision-resume.service || true
