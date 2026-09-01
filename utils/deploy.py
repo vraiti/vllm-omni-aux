@@ -17,7 +17,6 @@ from pathlib import Path
 VLLM_OMNI_AUX_DIR = str(Path(__file__).resolve().parent.parent)
 PROJECT_ROOT = str(Path(VLLM_OMNI_AUX_DIR).parent)
 VLLM_OMNI_DIR = os.path.join(PROJECT_ROOT, "vllm-omni")
-VENV_DIR = os.path.join(PROJECT_ROOT, "venv")
 DEPLOY_CONFIGS_DIR = os.path.join(VLLM_OMNI_AUX_DIR, "deploy-configs")
 HEALTH_URL = "http://localhost:8000/health"
 POLL_INTERVAL = 2
@@ -147,12 +146,13 @@ def main():
     kill_vllm_serve_processes()
     kill_gpu_processes()
 
+    # Invoke "vllm" as a bare command rather than resolving it against a
+    # hardcoded venv path -- this lets whichever venv is already active in
+    # the inherited PATH (e.g. run-remote.sh's --venv d3g-venv) win, instead
+    # of silently overriding it back to the default venv regardless of what
+    # was activated.
     env = os.environ.copy()
-    env["VIRTUAL_ENV"] = VENV_DIR
-    env["PATH"] = os.path.join(VENV_DIR, "bin") + ":" + env.get("PATH", "")
-
-    vllm = os.path.join(VENV_DIR, "bin", "vllm")
-    serve_cmd = f'{vllm} serve --omni {model} --deploy {deploy_path}'
+    serve_cmd = f'vllm serve --omni {model} --deploy {deploy_path}'
     if args.enforce_eager:
         serve_cmd += ' --enforce-eager'
     if not args.disable_tool_calling:
