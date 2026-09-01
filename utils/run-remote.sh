@@ -4,16 +4,16 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 resolve_alias() {
-    local configs=( ~/.ssh/config.d/* )
+    # Aliases live as `Host` lines inside files under ~/.ssh/config.d/ (e.g.
+    # aws-manage's consolidated config.d/awsm, which holds one block per
+    # managed instance) -- not one alias per file, so this must enumerate
+    # actual Host lines, not filenames.
+    local hosts
+    hosts=$(grep -hoE '^Host[[:space:]]+\S+' ~/.ssh/config.d/* 2>/dev/null | awk '{print $2}' | sort -u)
     local count=0
-    local single=""
-    for f in "${configs[@]}"; do
-        [[ -f "$f" ]] || continue
-        count=$((count + 1))
-        single=$(basename "$f")
-    done
-    if [[ $count -eq 1 ]]; then
-        echo "$single"
+    [[ -n "$hosts" ]] && count=$(wc -l <<< "$hosts")
+    if [[ "$count" -eq 1 ]]; then
+        echo "$hosts"
         return 0
     fi
     return 1
@@ -27,7 +27,7 @@ resolve_alias() {
 # when the intended target ("spark") was only in ~/.ssh/config.
 is_known_host() {
     local host="$1"
-    [[ -f "$HOME/.ssh/config.d/$host" ]] && return 0
+    grep -qE "^Host[[:space:]]+(\S+[[:space:]]+)*${host}([[:space:]]|\$)" ~/.ssh/config.d/* 2>/dev/null && return 0
     [[ -f "$HOME/.ssh/config" ]] && grep -qE "^[[:space:]]*Host[[:space:]]+(\S+[[:space:]]+)*${host}([[:space:]]|$)" "$HOME/.ssh/config" && return 0
     return 1
 }
