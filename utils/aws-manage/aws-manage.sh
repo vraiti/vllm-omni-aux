@@ -339,7 +339,10 @@ cmd_start() {
     echo "Public IP: $new_ip"
 
     ssh-keygen -R "$new_ip" 2>/dev/null || true
-    ssh_alias_update_hostname "$SSH_ALIAS" "$new_ip"
+    # write, not update_hostname: self-healing if the alias's block is
+    # somehow missing (e.g. migrating from an older config scheme) rather
+    # than silently no-op-ing.
+    ssh_alias_write "$SSH_ALIAS" "$new_ip"
 
     bash "$SCRIPT_DIR/poll-ssh.sh" "$SSH_ALIAS"
 

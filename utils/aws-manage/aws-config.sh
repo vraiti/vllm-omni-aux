@@ -51,16 +51,6 @@ ssh_alias_write() {
     } >> "$SSH_CONFIG_FILE"
 }
 
-ssh_alias_update_hostname() {
-    local alias="$1" new_hostname="$2"
-    awk -v alias="$alias" -v new_hostname="$new_hostname" '
-        /^Host / { in_block = ($2 == alias) }
-        in_block && /^[[:space:]]*HostName / { print "    HostName " new_hostname; next }
-        { print }
-    ' "$SSH_CONFIG_FILE" > "$SSH_CONFIG_FILE.tmp"
-    mv "$SSH_CONFIG_FILE.tmp" "$SSH_CONFIG_FILE"
-}
-
 ssh_alias_rename() {
     local old="$1" new="$2"
     awk -v old="$old" -v new="$new" '
