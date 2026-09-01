@@ -11,9 +11,6 @@ import urllib.error
 
 from pathlib import Path
 
-# Derived from this script's own location rather than hardcoded to /app, so
-# this works unchanged on a project root synced elsewhere (e.g. run via
-# run-remote.sh's `alias:remote_path` form onto a non-/app host).
 VLLM_OMNI_AUX_DIR = str(Path(__file__).resolve().parent.parent)
 PROJECT_ROOT = str(Path(VLLM_OMNI_AUX_DIR).parent)
 VLLM_OMNI_DIR = os.path.join(PROJECT_ROOT, "vllm-omni")
@@ -27,31 +24,12 @@ MODEL_MAP = {
     "flux2": "black-forest-labs/FLUX.2-dev",
 }
 
-# Per-model default --tool-call-parser name, used unless --tool-call-parser
-# is given explicitly or --disable-tool-calling is passed.
-#
-# qwen3-omni -> "hermes", not "qwen3_xml": confirmed directly against this
-# model's own chat_template.json (HF cache), which renders tool calls as
-# plain JSON inside the tags --  <tool_call>\n{"name": .., "arguments": ..}\n</tool_call>
-# -- matching Hermes2ProToolParser's format exactly. qwen3_xml/Qwen3Parser
-# expects a different, nested <function=name><parameter=key>value</parameter></function>
-# encoding (see vllm/parser/qwen3.py's module docstring) that this model's
-# template does not produce.
 DEFAULT_TOOL_CALL_PARSER = {
     "qwen3-omni": "hermes",
 }
 
 
 def kill_vllm_serve_processes():
-    # nvidia-smi's compute-apps list (kill_gpu_processes, below) only covers
-    # processes holding an active CUDA context -- the top-level `vllm serve`
-    # APIServer process just orchestrates the per-stage worker subprocesses
-    # that actually touch the GPU, so it doesn't appear there. If those
-    # workers already died (crash, previous kill_gpu_processes() run) while
-    # the APIServer parent lingered, it keeps the HTTP port bound with
-    # nothing left for kill_gpu_processes() to find, and the next deploy
-    # fails with "Address already in use". Kill any `vllm serve` process by
-    # command line directly to close that gap.
     result = subprocess.run(
         ["pgrep", "-f", "vllm serve"],
         capture_output=True, text=True,
@@ -146,23 +124,17 @@ def main():
     kill_vllm_serve_processes()
     kill_gpu_processes()
 
-    # Invoke "vllm" as a bare command rather than resolving it against a
-    # hardcoded venv path -- this lets whichever venv is already active in
-    # the inherited PATH (e.g. run-remote.sh's --venv d3g-venv) win, instead
-    # of silently overriding it back to the default venv regardless of what
-    # was activated.
     env = os.environ.copy()
     serve_cmd = f'vllm serve --omni {model} --deploy {deploy_path}'
     if args.enforce_eager:
         serve_cmd += ' --enforce-eager'
     if not args.disable_tool_calling:
-        # On by default for any model with a DEFAULT_TOOL_CALL_PARSER entry
-        # (or an explicit --tool-call-parser override) -- silently skipped
-        # for models with neither, rather than failing the deploy.
         tool_call_parser = args.tool_call_parser or DEFAULT_TOOL_CALL_PARSER.get(args.model_key)
         if tool_call_parser:
             serve_cmd += f' --enable-auto-tool-choice --tool-call-parser {tool_call_parser}'
     cmd = shlex.split(serve_cmd)
+
+    print("deploy.py: launching vllm...")
 
     if args.i:
         proc = subprocess.Popen(cmd, env=env)
