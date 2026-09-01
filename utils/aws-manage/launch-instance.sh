@@ -53,15 +53,8 @@ PUBLIC_IP=$(aws ec2 describe-instances \
     --output text)
 
 echo "Public IP: $PUBLIC_IP"
-mkdir -p ~/.ssh/config.d
 ssh-keygen -R "$PUBLIC_IP" 2>/dev/null || true
-cat > ~/.ssh/config.d/"$SSH_ALIAS" <<EOF
-Host ${SSH_ALIAS}
-    HostName ${PUBLIC_IP}
-    User ec2-user
-    IdentityFile ~/.ssh/vraiti-ed25519.pem
-    StrictHostKeyChecking accept-new
-EOF
+ssh_alias_write "$SSH_ALIAS" "$PUBLIC_IP"
 
 bash "$SCRIPT_DIR/poll-ssh.sh" "$SSH_ALIAS"
 

@@ -36,12 +36,10 @@ EOF
 }
 
 INSTANCE_ALIAS="aws"
-SSH_CONFIG="$HOME/.ssh/config.d/$INSTANCE_ALIAS"
 SSH_ALIAS="$INSTANCE_ALIAS"
 
 set_alias() {
     INSTANCE_ALIAS="${1:-aws}"
-    SSH_CONFIG="$HOME/.ssh/config.d/$INSTANCE_ALIAS"
     SSH_ALIAS="$INSTANCE_ALIAS"
 }
 
@@ -70,20 +68,20 @@ alias_exists_in_aws() {
     [[ "$id" != "None" && -n "$id" ]]
 }
 
-# The local ~/.ssh/config.d/<alias> file is not a source of truth -- if the
-# instance was deleted out-of-band (console, another machine, `aws ec2
-# terminate-instances` directly), the file goes stale. Reconcile against AWS
-# before treating an existing file as "alias in use".
+# The shared SSH config file is not a source of truth -- if the instance
+# was deleted out-of-band (console, another machine, `aws ec2
+# terminate-instances` directly), its block goes stale. Reconcile against
+# AWS before treating an existing block as "alias in use".
 check_alias_available() {
-    if [[ ! -f "$SSH_CONFIG" ]]; then
+    if ! ssh_alias_exists "$INSTANCE_ALIAS"; then
         return
     fi
     if alias_exists_in_aws; then
         echo "ERROR: alias '$INSTANCE_ALIAS' already exists" >&2
         exit 1
     fi
-    echo "Alias '$INSTANCE_ALIAS' has no matching AWS instance (deleted out-of-band); removing stale $SSH_CONFIG"
-    rm -f "$SSH_CONFIG"
+    echo "Alias '$INSTANCE_ALIAS' has no matching AWS instance (deleted out-of-band); removing stale entry from $SSH_CONFIG_FILE"
+    ssh_alias_remove "$INSTANCE_ALIAS"
     fusermount -u "/tmp/logs/$INSTANCE_ALIAS" 2>/dev/null || true
 }
 
@@ -244,14 +242,7 @@ cmd_create_raw() {
         exit 1
     fi
 
-    mkdir -p ~/.ssh/config.d
-    cat > "$SSH_CONFIG" <<EOF
-Host ${SSH_ALIAS}
-    HostName ${public_ip}
-    User ec2-user
-    IdentityFile ~/.ssh/vraiti-ed25519.pem
-    StrictHostKeyChecking accept-new
-EOF
+    ssh_alias_write "$SSH_ALIAS" "$public_ip"
 
     echo ""
     echo "Instance: $id"
@@ -262,14 +253,12 @@ EOF
 cmd_mv() {
     local old_alias="${1:?Usage: $0 mv <old-alias> <new-alias>}"
     local new_alias="${2:?Usage: $0 mv <old-alias> <new-alias>}"
-    local old_config="$HOME/.ssh/config.d/$old_alias"
-    local new_config="$HOME/.ssh/config.d/$new_alias"
 
-    if [[ ! -f "$old_config" ]]; then
-        echo "ERROR: no config at $old_config" >&2
+    if ! ssh_alias_exists "$old_alias"; then
+        echo "ERROR: no SSH config entry for '$old_alias' in $SSH_CONFIG_FILE" >&2
         exit 1
     fi
-    if [[ -f "$new_config" ]]; then
+    if ssh_alias_exists "$new_alias"; then
         echo "ERROR: alias '$new_alias' already exists" >&2
         exit 1
     fi
@@ -295,8 +284,7 @@ cmd_mv() {
         echo "WARNING: could not find AWS instance to rename tag" >&2
     fi
 
-    sed -i "s/^Host .*/Host $new_alias/" "$old_config"
-    mv "$old_config" "$new_config"
+    ssh_alias_rename "$old_alias" "$new_alias"
     echo "Renamed alias '$old_alias' -> '$new_alias'"
 
     local old_mount="/tmp/$old_alias"
@@ -351,7 +339,7 @@ cmd_start() {
     echo "Public IP: $new_ip"
 
     ssh-keygen -R "$new_ip" 2>/dev/null || true
-    sed -i "s/HostName .*/HostName $new_ip/" "$SSH_CONFIG"
+    ssh_alias_update_hostname "$SSH_ALIAS" "$new_ip"
 
     bash "$SCRIPT_DIR/poll-ssh.sh" "$SSH_ALIAS"
 
@@ -371,10 +359,8 @@ cmd_delete() {
     echo "Terminating $id..."
     aws ec2 terminate-instances --instance-ids "$id" --output text
 
-    if [[ -f "$SSH_CONFIG" ]]; then
-        rm "$SSH_CONFIG"
-        echo "Removed $SSH_CONFIG"
-    fi
+    ssh_alias_remove "$INSTANCE_ALIAS"
+    echo "Removed '$INSTANCE_ALIAS' from $SSH_CONFIG_FILE"
 
     echo "Instance $id terminated, SSH alias '$SSH_ALIAS' removed."
 }
