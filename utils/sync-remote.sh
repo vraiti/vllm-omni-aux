@@ -67,24 +67,28 @@ while IFS= read -r entry <&3 || [[ -n "$entry" ]]; do
         continue
     fi
 
-    # A marker file (excluded from rsync's own transfer/delete) records the
-    # commit last synced to this remote path. Nothing but this script
-    # modifies remote source trees, and worktrees each have their own HEAD,
-    # so a clean local tree whose HEAD matches the marker is guaranteed
-    # identical to what's already there -- skip the rsync scan entirely.
+    # A marker file (excluded from rsync's own transfer/delete) records what
+    # was last synced to this remote path. Nothing but this script modifies
+    # remote source trees, so a local tree whose identity matches the marker
+    # is guaranteed identical to what's already there -- skip the rsync scan
+    # entirely. For a git repo that identity is HEAD's commit (and the tree
+    # must be clean, so HEAD fully determines the content); for a plain
+    # directory there's no commit to key off of, so a hash of every file's
+    # path/mtime/size stands in for it instead.
+    marker_path="$REMOTE_ROOT/$repo_name/.rrr-synced-commit"
     if [[ -e "$repo_dir/.git" ]]; then
         if [[ -n "$(git -C "$repo_dir" status --porcelain)" ]]; then
             echo "ERROR: $repo_dir has uncommitted changes" >&2
             exit 1
         fi
-
-        local_head="$(git -C "$repo_dir" rev-parse HEAD)"
-        marker_path="$REMOTE_ROOT/$repo_name/.rrr-synced-commit"
-        remote_head="$(ssh "$SSH_ALIAS" "cat $(printf '%q' "$marker_path") 2>/dev/null" || true)"
-        if [[ -n "$remote_head" && "$remote_head" == "$local_head" ]]; then
-            echo "Skipping $repo_name (unchanged since last sync)"
-            continue
-        fi
+        local_id="$(git -C "$repo_dir" rev-parse HEAD)"
+    else
+        local_id="$(find "$repo_dir" -type f -printf '%P %T@ %s\n' 2>/dev/null | sort | sha256sum | awk '{print $1}')"
+    fi
+    remote_id="$(ssh "$SSH_ALIAS" "cat $(printf '%q' "$marker_path") 2>/dev/null" || true)"
+    if [[ -n "$remote_id" && "$remote_id" == "$local_id" ]]; then
+        echo "Skipping $repo_name (unchanged since last sync)"
+        continue
     fi
 
     echo "Syncing $repo_name..."
@@ -98,15 +102,15 @@ while IFS= read -r entry <&3 || [[ -n "$entry" ]]; do
         # ISN'T) could still end up on the remote. The archive only ever
         # contains what's actually committed.
         archive_dir="$(mktemp -d)"
-        archive_repo_tree "$repo_dir" "$local_head" "$archive_dir"
+        archive_repo_tree "$repo_dir" "$local_id" "$archive_dir"
         rsync -az --delete --exclude=.rrr-synced-commit \
             "$archive_dir/" "$SSH_ALIAS:$REMOTE_ROOT/$repo_name/"
         rm -rf "$archive_dir"
-        ssh "$SSH_ALIAS" "echo $(printf '%q' "$local_head") > $(printf '%q' "$marker_path")"
     else
         # No commit to export from -- fall back to syncing the working
         # directory directly.
         rsync -az --delete --exclude=.rrr-synced-commit \
             "$repo_dir/" "$SSH_ALIAS:$REMOTE_ROOT/$repo_name/"
     fi
+    ssh "$SSH_ALIAS" "echo $(printf '%q' "$local_id") > $(printf '%q' "$marker_path")"
 done 3< "$REPOS_FILE"
