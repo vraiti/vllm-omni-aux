@@ -27,8 +27,10 @@ Commands:
   ls                               List tagged instances (alias, state, id) live from AWS
   refresh                          Reconcile $SSH_CONFIG_FILE against live AWS state:
                                     update HostName for any alias whose public IP
-                                    changed, and remove aliases whose instance no
-                                    longer exists in AWS (e.g. deleted out-of-band)
+                                    changed, backfill GSSAPIAuthentication no on any
+                                    alias missing it, and remove aliases whose
+                                    instance no longer exists in AWS (e.g. deleted
+                                    out-of-band)
   snapshot <alias>                 Snapshot the instance's root and cache EBS
                                     volumes and republish them as the
                                     $AMI_NAME AMI
@@ -324,22 +326,31 @@ cmd_refresh() {
             continue
         fi
 
-        local current_ip=""
+        local current_ip="" has_gssapi=0
         if ssh_alias_exists "$alias"; then
             current_ip=$(awk -v alias="$alias" '
                 /^Host / { active = ($2 == alias) }
                 active && /^[[:space:]]*HostName / { print $2 }
             ' "$SSH_CONFIG_FILE")
+            awk -v alias="$alias" '
+                /^Host / { active = ($2 == alias) }
+                active && /^[[:space:]]*GSSAPIAuthentication[[:space:]]+no[[:space:]]*$/ { found = 1 }
+                END { exit !found }
+            ' "$SSH_CONFIG_FILE" && has_gssapi=1
         fi
 
-        if [[ "$current_ip" == "$public_ip" ]]; then
+        if [[ "$current_ip" == "$public_ip" && "$has_gssapi" -eq 1 ]]; then
             echo "OK   $alias ($public_ip)"
             continue
         fi
 
-        echo "SYNC $alias: ${current_ip:-<none>} -> $public_ip"
-        [[ -n "$current_ip" ]] && ssh-keygen -R "$current_ip" 2>/dev/null || true
-        ssh-keygen -R "$public_ip" 2>/dev/null || true
+        if [[ "$current_ip" != "$public_ip" ]]; then
+            echo "SYNC $alias: ${current_ip:-<none>} -> $public_ip"
+            [[ -n "$current_ip" ]] && ssh-keygen -R "$current_ip" 2>/dev/null || true
+            ssh-keygen -R "$public_ip" 2>/dev/null || true
+        else
+            echo "SYNC $alias: adding GSSAPIAuthentication no"
+        fi
         ssh_alias_write "$alias" "$public_ip"
     done < <(aws ec2 describe-instances \
         --filters "Name=tag:Project,Values=$PROJECT_TAG" \

@@ -1,29 +1,71 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Syncs every repo listed in <project-dir>/repos.txt to <remote-root> on
-# <ssh-alias> via rsync. Meant to be invoked by run-remote.sh (which has
-# already resolved the alias and any remote-side path expansion), but is
-# self-contained enough to run standalone too.
-SSH_ALIAS="${1:?Usage: $0 <ssh-alias> <remote-root> [project-dir]}"
-REMOTE_ROOT="${2:?Usage: $0 <ssh-alias> <remote-root> [project-dir]}"
+# Syncs every repo named in a run-remote.sh profile's `sync` map (see
+# profile.py -- an object of <relative path>: <label>, label one of
+# default/site-package/push-only) to <remote-root> on <ssh-alias> via rsync.
+# Meant to be invoked by run-remote.sh (which has already resolved the alias
+# and any remote-side path expansion), but is self-contained enough to run
+# standalone too. Falls back to <project-dir>/repos.txt (the same
+# name[:label] format, one per line) when no --profile is given, for use
+# without a profile.
+ARGS=()
+PROFILE_NAME=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --profile)
+            PROFILE_NAME="$2"
+            shift 2
+            ;;
+        --profile=*)
+            PROFILE_NAME="${1#--profile=}"
+            shift
+            ;;
+        *)
+            ARGS+=("$1")
+            shift
+            ;;
+    esac
+done
+set -- "${ARGS[@]}"
+
+SSH_ALIAS="${1:?Usage: $0 <ssh-alias> <remote-root> [project-dir] [--profile NAME]}"
+REMOTE_ROOT="${2:?Usage: $0 <ssh-alias> <remote-root> [project-dir] [--profile NAME]}"
 PROJECT_DIR="${3:-}"
 
-if [[ -z "$PROJECT_DIR" ]]; then
-    PROJECT_DIR="$PWD"
-    while [[ "$PROJECT_DIR" != "$HOME/omni" && "$PROJECT_DIR" != "/" ]]; do
-        if [[ "$(dirname "$PROJECT_DIR")" == "$HOME/omni" ]]; then
-            break
-        fi
-        PROJECT_DIR="$(dirname "$PROJECT_DIR")"
-    done
+if [[ -n "$PROFILE_NAME" ]]; then
+    PROFILE_PATH="$HOME/.local/run-remote/$PROFILE_NAME.json"
+    if [[ ! -f "$PROFILE_PATH" ]]; then
+        echo "ERROR: profile '$PROFILE_NAME' not found at $PROFILE_PATH" >&2
+        exit 1
+    fi
 fi
 
-REPOS_FILE="$PROJECT_DIR/repos.txt"
+# A profile's `local-home` (see profile.py) pins the project directory on
+# this machine explicitly; an explicit [project-dir] argument still wins
+# over it. Without either, use CWD.
+if [[ -z "$PROJECT_DIR" && -n "$PROFILE_NAME" ]]; then
+    PROJECT_DIR="$(jq -r '.["local-home"] // empty' "$PROFILE_PATH")"
+fi
+PROJECT_DIR="${PROJECT_DIR:-$PWD}"
 
-if [[ ! -f "$REPOS_FILE" ]]; then
-    echo "ERROR: $REPOS_FILE not found" >&2
-    exit 1
+HAVE_PROFILE_SYNC=0
+if [[ -n "$PROFILE_NAME" ]]; then
+    # A profile without a `sync` key falls back to repos.txt below -- only a
+    # profile that actually defines `sync` (even as `{}`) uses it as-is.
+    if [[ "$(jq 'has("sync")' "$PROFILE_PATH")" == "true" ]]; then
+        HAVE_PROFILE_SYNC=1
+        mapfile -t ENTRIES < <(jq -r '.sync | to_entries[] | "\(.key):\(.value)"' "$PROFILE_PATH")
+    fi
+fi
+
+if [[ "$HAVE_PROFILE_SYNC" -eq 0 ]]; then
+    REPOS_FILE="$PROJECT_DIR/repos.txt"
+    if [[ ! -f "$REPOS_FILE" ]]; then
+        echo "ERROR: $REPOS_FILE not found" >&2
+        exit 1
+    fi
+    mapfile -t ENTRIES < "$REPOS_FILE"
 fi
 
 # `git archive` only emits an empty directory for a submodule path (it's a
@@ -72,11 +114,12 @@ push_repo_and_submodules() {
 
 background_pids=()
 
-# Read from fd 3, not stdin: ssh/rsync inside this loop otherwise inherit
-# the loop's stdin redirect and drain the rest of repos.txt as if it were
-# their own input, silently truncating the loop after the first iteration
-# that calls ssh.
-while IFS= read -r entry <&3 || [[ -n "$entry" ]]; do
+# Iterating a bash array (rather than reading lines from the source file via
+# a while-read loop) sidesteps the classic gotcha where ssh/rsync inside the
+# loop body would otherwise inherit the loop's stdin redirect and drain the
+# rest of the input as if it were their own -- no redirect here, so no
+# draining is possible.
+for entry in "${ENTRIES[@]}"; do
     entry="${entry%%#*}"
     entry="${entry// /}"
     [[ -z "$entry" ]] && continue
@@ -144,7 +187,7 @@ while IFS= read -r entry <&3 || [[ -n "$entry" ]]; do
             "$repo_dir/" "$SSH_ALIAS:$REMOTE_ROOT/$repo_name/"
     fi
     ssh "$SSH_ALIAS" "echo $(printf '%q' "$local_id") > $(printf '%q' "$marker_path")"
-done 3< "$REPOS_FILE"
+done
 
 if [[ ${#background_pids[@]} -gt 0 ]]; then
     wait "${background_pids[@]}"

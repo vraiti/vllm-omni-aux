@@ -78,7 +78,7 @@ while [[ $# -gt 0 ]]; do
 done
 set -- "${ARGS[@]}"
 
-# A profile (~/.local/run-remote/<name>.json, written by create-profile.sh)
+# A profile (~/.local/run-remote/<name>.json, written by profile.py)
 # supplies default `venv`/`env` values -- applied here, before --venv/--env
 # parsing above has a chance to matter, so an explicit CLI flag still wins
 # over whatever the profile set.
@@ -103,6 +103,7 @@ if [[ -n "$PROFILE_NAME" ]]; then
 
     PROFILE_HOST="$(jq -r '.host // empty' "$PROFILE_PATH")"
     PROFILE_HOME="$(jq -r '.home // empty' "$PROFILE_PATH")"
+    PROFILE_LOCAL_HOME="$(jq -r '.["local-home"] // empty' "$PROFILE_PATH")"
 
     # A profile's `command` is only a default -- an explicit <command>
     # [args...] on the CLI (i.e. $# still nonzero after flag parsing above)
@@ -126,7 +127,7 @@ fi
 # Single-quoted so the literal text ($HOME, unexpanded) survives until it's
 # sent to the remote shell below -- it must expand against the remote
 # user's home, not whatever $HOME happens to be on this machine. A profile's
-# `home`/`host` (see create-profile.sh) supply non-default values here, but
+# `home`/`host` (see profile.py) supply non-default values here, but
 # an explicit [alias[:remote_path]] argument still wins over either.
 REMOTE_ROOT="${PROFILE_HOME:-\$HOME/vraiti}"
 ALIAS_CANDIDATE="${1%%:*}"
@@ -155,13 +156,9 @@ fi
 REMOTE_ROOT="$(ssh "$SSH_ALIAS" "echo $REMOTE_ROOT")"
 ssh "$SSH_ALIAS" "mkdir -p $(printf '%q' "$REMOTE_ROOT")"
 
-PROJECT_DIR="$PWD"
-while [[ "$PROJECT_DIR" != "$HOME/omni" && "$PROJECT_DIR" != "/" ]]; do
-    if [[ "$(dirname "$PROJECT_DIR")" == "$HOME/omni" ]]; then
-        break
-    fi
-    PROJECT_DIR="$(dirname "$PROJECT_DIR")"
-done
+# A profile's `local-home` (see profile.py) pins the project directory on
+# this machine explicitly; without one, use CWD.
+PROJECT_DIR="${PROFILE_LOCAL_HOME:-$PWD}"
 
 # Push each repo listed in repos.txt to its git remote in the background --
 # started here (before the potentially-slow sync/venv/deploy work below) and
@@ -203,7 +200,11 @@ report_pushes() {
 }
 trap report_pushes EXIT
 
-bash "$SCRIPT_DIR/sync-remote.sh" "$SSH_ALIAS" "$REMOTE_ROOT" "$PROJECT_DIR"
+if [[ -n "$PROFILE_NAME" ]]; then
+    bash "$SCRIPT_DIR/sync-remote.sh" "$SSH_ALIAS" "$REMOTE_ROOT" "$PROJECT_DIR" --profile "$PROFILE_NAME"
+else
+    bash "$SCRIPT_DIR/sync-remote.sh" "$SSH_ALIAS" "$REMOTE_ROOT" "$PROJECT_DIR"
+fi
 
 REMOTE_VENV_DIR="$REMOTE_ROOT/$VENV_NAME"
 if ! ssh "$SSH_ALIAS" "test -d $(printf '%q' "$REMOTE_VENV_DIR")"; then

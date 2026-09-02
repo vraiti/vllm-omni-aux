@@ -47,6 +47,7 @@ ssh_alias_write() {
         echo "    User ec2-user"
         echo "    IdentityFile ~/.ssh/vraiti-ed25519.pem"
         echo "    StrictHostKeyChecking accept-new"
+        echo "    GSSAPIAuthentication no"
         echo ""
     } >> "$SSH_CONFIG_FILE"
 }
