@@ -40,6 +40,7 @@ is_known_host() {
 VENV_NAME="venv"
 VENV_SPECIFIED=0
 EXTRA_ENV=()
+PROFILE_NAME=""
 ARGS=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -61,6 +62,14 @@ while [[ $# -gt 0 ]]; do
             EXTRA_ENV+=("${1#--env=}")
             shift
             ;;
+        --profile)
+            PROFILE_NAME="$2"
+            shift 2
+            ;;
+        --profile=*)
+            PROFILE_NAME="${1#--profile=}"
+            shift
+            ;;
         *)
             ARGS+=("$1")
             shift
@@ -69,15 +78,57 @@ while [[ $# -gt 0 ]]; do
 done
 set -- "${ARGS[@]}"
 
+# A profile (~/.local/run-remote/<name>.json, written by create-profile.sh)
+# supplies default `venv`/`env` values -- applied here, before --venv/--env
+# parsing above has a chance to matter, so an explicit CLI flag still wins
+# over whatever the profile set.
+if [[ -n "$PROFILE_NAME" ]]; then
+    PROFILE_PATH="$HOME/.local/run-remote/$PROFILE_NAME.json"
+    if [[ ! -f "$PROFILE_PATH" ]]; then
+        echo "ERROR: profile '$PROFILE_NAME' not found at $PROFILE_PATH" >&2
+        exit 1
+    fi
+    if [[ "$VENV_SPECIFIED" -eq 0 ]]; then
+        PROFILE_VENV="$(jq -r '.venv' "$PROFILE_PATH")"
+        if [[ -n "$PROFILE_VENV" && "$PROFILE_VENV" != "null" ]]; then
+            VENV_NAME="$PROFILE_VENV"
+            VENV_SPECIFIED=1
+        fi
+    fi
+    PROFILE_ENV=()
+    while IFS= read -r kv; do
+        PROFILE_ENV+=("$kv")
+    done < <(jq -r '.env // {} | to_entries[] | "\(.key)=\(.value)"' "$PROFILE_PATH")
+    EXTRA_ENV=("${PROFILE_ENV[@]}" "${EXTRA_ENV[@]}")
+
+    PROFILE_HOST="$(jq -r '.host // empty' "$PROFILE_PATH")"
+    PROFILE_HOME="$(jq -r '.home // empty' "$PROFILE_PATH")"
+
+    # A profile's `command` is only a default -- an explicit <command>
+    # [args...] on the CLI (i.e. $# still nonzero after flag parsing above)
+    # overrides it entirely rather than merging with it.
+    if [[ $# -eq 0 ]]; then
+        PROFILE_COMMAND=()
+        while IFS= read -r arg; do
+            PROFILE_COMMAND+=("$arg")
+        done < <(jq -r '.command // [] | .[]' "$PROFILE_PATH")
+        if [[ ${#PROFILE_COMMAND[@]} -gt 0 ]]; then
+            set -- "${PROFILE_COMMAND[@]}"
+        fi
+    fi
+fi
+
 if [[ $# -lt 1 ]]; then
-    echo "Usage: $0 [alias[:remote_path]] [--venv NAME] [--env VAR=value ...] <command> [args...]" >&2
+    echo "Usage: $0 [alias[:remote_path]] [--venv NAME] [--env VAR=value ...] [--profile NAME] <command> [args...]" >&2
     exit 1
 fi
 
 # Single-quoted so the literal text ($HOME, unexpanded) survives until it's
 # sent to the remote shell below -- it must expand against the remote
-# user's home, not whatever $HOME happens to be on this machine.
-REMOTE_ROOT='$HOME/vraiti'
+# user's home, not whatever $HOME happens to be on this machine. A profile's
+# `home`/`host` (see create-profile.sh) supply non-default values here, but
+# an explicit [alias[:remote_path]] argument still wins over either.
+REMOTE_ROOT="${PROFILE_HOME:-\$HOME/vraiti}"
 ALIAS_CANDIDATE="${1%%:*}"
 if is_known_host "$ALIAS_CANDIDATE"; then
     SSH_ALIAS="$ALIAS_CANDIDATE"
@@ -86,6 +137,8 @@ if is_known_host "$ALIAS_CANDIDATE"; then
         [[ -n "$PATH_CANDIDATE" ]] && REMOTE_ROOT="$PATH_CANDIDATE"
     fi
     shift
+elif [[ -n "${PROFILE_HOST:-}" ]]; then
+    SSH_ALIAS="$PROFILE_HOST"
 elif SSH_ALIAS=$(resolve_alias); then
     :
 else

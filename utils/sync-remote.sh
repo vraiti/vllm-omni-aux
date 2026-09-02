@@ -50,6 +50,28 @@ archive_repo_tree() {
     done < <(git -C "$repo_dir" submodule status 2>/dev/null)
 }
 
+# For a `:push-only` repo, the remote is expected to `git pull` its own
+# copy rather than receive one via rsync (see CLAUDE.md's remote-file-editing
+# protocol). Recurses into submodules so each gets pushed too.
+push_repo_and_submodules() {
+    local repo_dir="$1"
+    if [[ -n "$(git -C "$repo_dir" status --porcelain)" ]]; then
+        echo "ERROR: $repo_dir has uncommitted changes" >&2
+        return 1
+    fi
+    git -C "$repo_dir" push
+
+    while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        [[ "${line:0:1}" == "-" ]] && continue  # not initialized, nothing to push
+        local sub_path
+        sub_path="$(awk '{print $2}' <<< "$line")"
+        push_repo_and_submodules "$repo_dir/$sub_path"
+    done < <(git -C "$repo_dir" submodule status 2>/dev/null)
+}
+
+background_pids=()
+
 # Read from fd 3, not stdin: ssh/rsync inside this loop otherwise inherit
 # the loop's stdin redirect and drain the rest of repos.txt as if it were
 # their own input, silently truncating the loop after the first iteration
@@ -60,10 +82,19 @@ while IFS= read -r entry <&3 || [[ -n "$entry" ]]; do
     [[ -z "$entry" ]] && continue
 
     repo_name="${entry%%:*}"
+    label=""
+    [[ "$entry" == *:* ]] && label="${entry#*:}"
     repo_dir="$PROJECT_DIR/$repo_name"
 
     if [[ ! -d "$repo_dir" ]]; then
         echo "WARNING: $repo_dir does not exist, skipping"
+        continue
+    fi
+
+    if [[ "$label" == "push-only" ]]; then
+        echo "Pushing $repo_name in background (push-only)..."
+        (push_repo_and_submodules "$repo_dir" 2>&1 | sed "s/^/[$repo_name] /") &
+        background_pids+=("$!")
         continue
     fi
 
@@ -114,3 +145,7 @@ while IFS= read -r entry <&3 || [[ -n "$entry" ]]; do
     fi
     ssh "$SSH_ALIAS" "echo $(printf '%q' "$local_id") > $(printf '%q' "$marker_path")"
 done 3< "$REPOS_FILE"
+
+if [[ ${#background_pids[@]} -gt 0 ]]; then
+    wait "${background_pids[@]}"
+fi

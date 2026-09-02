@@ -25,6 +25,10 @@ Commands:
   delete [alias]                   Terminate the instance and remove SSH config
   mv <old-alias> <new-alias>       Re-alias the instance locally
   ls                               List tagged instances (alias, state, id) live from AWS
+  refresh                          Reconcile $SSH_CONFIG_FILE against live AWS state:
+                                    update HostName for any alias whose public IP
+                                    changed, and remove aliases whose instance no
+                                    longer exists in AWS (e.g. deleted out-of-band)
   snapshot <alias>                 Snapshot the instance's root and cache EBS
                                     volumes and republish them as the
                                     $AMI_NAME AMI
@@ -308,6 +312,58 @@ cmd_ls() {
     done
 }
 
+cmd_refresh() {
+    echo "Fetching live instance state from AWS..."
+    local seen_aliases=()
+    while IFS=$'\t' read -r alias state id public_ip; do
+        [[ -z "$alias" || "$alias" == "None" ]] && continue
+        seen_aliases+=("$alias")
+
+        if [[ "$state" != "running" || -z "$public_ip" || "$public_ip" == "None" ]]; then
+            echo "SKIP $alias ($state, no public IP to sync)"
+            continue
+        fi
+
+        local current_ip=""
+        if ssh_alias_exists "$alias"; then
+            current_ip=$(awk -v alias="$alias" '
+                /^Host / { active = ($2 == alias) }
+                active && /^[[:space:]]*HostName / { print $2 }
+            ' "$SSH_CONFIG_FILE")
+        fi
+
+        if [[ "$current_ip" == "$public_ip" ]]; then
+            echo "OK   $alias ($public_ip)"
+            continue
+        fi
+
+        echo "SYNC $alias: ${current_ip:-<none>} -> $public_ip"
+        [[ -n "$current_ip" ]] && ssh-keygen -R "$current_ip" 2>/dev/null || true
+        ssh-keygen -R "$public_ip" 2>/dev/null || true
+        ssh_alias_write "$alias" "$public_ip"
+    done < <(aws ec2 describe-instances \
+        --filters "Name=tag:Project,Values=$PROJECT_TAG" \
+                  "Name=instance-state-name,Values=running,stopped,pending,stopping" \
+        --query 'Reservations[].Instances[].[Tags[?Key==`ssh-alias`]|[0].Value,State.Name,InstanceId,PublicIpAddress]' \
+        --output text)
+
+    [[ -f "$SSH_CONFIG_FILE" ]] || return 0
+    local configured_aliases
+    configured_aliases=$(grep -oE '^Host .+' "$SSH_CONFIG_FILE" | awk '{print $2}')
+    while IFS= read -r alias; do
+        [[ -z "$alias" ]] && continue
+        local found=0
+        for seen in "${seen_aliases[@]}"; do
+            [[ "$seen" == "$alias" ]] && { found=1; break; }
+        done
+        if [[ "$found" -eq 0 ]]; then
+            echo "STALE $alias: no matching AWS instance, removing from $SSH_CONFIG_FILE"
+            ssh_alias_remove "$alias"
+            fusermount -u "/tmp/logs/$alias" 2>/dev/null || true
+        fi
+    done <<< "$configured_aliases"
+}
+
 cmd_stop() {
     set_alias "${1:-}"
     local id
@@ -402,6 +458,7 @@ case "$COMMAND" in
     delete)         cmd_delete "$@" ;;
     mv)             cmd_mv "$@" ;;
     ls)             cmd_ls ;;
+    refresh)        cmd_refresh ;;
     snapshot)       cmd_snapshot "$@" ;;
     snapshot-cache) cmd_snapshot_cache "$@" ;;
     *)              usage ;;
