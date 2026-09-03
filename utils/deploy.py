@@ -2,6 +2,7 @@
 import argparse
 import os
 import shlex
+import shutil
 import signal
 import subprocess
 import sys
@@ -17,6 +18,7 @@ VLLM_OMNI_DIR = os.path.join(PROJECT_ROOT, "vllm-omni")
 DEPLOY_CONFIGS_DIR = os.path.join(VLLM_OMNI_AUX_DIR, "deploy-configs")
 HEALTH_URL = "http://localhost:8000/health"
 POLL_INTERVAL = 2
+D3G_ARCHIVE_DIR = "/tmp/d3g-archive"
 
 MODEL_MAP = {
     "qwen3-omni": "Qwen/Qwen3-Omni-30B-A3B-Instruct",
@@ -69,6 +71,19 @@ def gpu_count():
         capture_output=True, text=True,
     )
     return len([l for l in result.stdout.splitlines() if l.strip()])
+
+
+def archive_d3g_outdir():
+    outdir = os.environ.get("D3G_OUTDIR")
+    if not outdir or not os.path.isdir(outdir):
+        return
+    entries = os.listdir(outdir)
+    if not entries:
+        return
+    os.makedirs(D3G_ARCHIVE_DIR, exist_ok=True)
+    print(f"deploy.py: archiving {len(entries)} item(s) from D3G_OUTDIR ({outdir}) to {D3G_ARCHIVE_DIR}...")
+    for entry in entries:
+        shutil.move(os.path.join(outdir, entry), os.path.join(D3G_ARCHIVE_DIR, entry))
 
 
 def resolve_model(key):
@@ -124,10 +139,19 @@ def main():
         with open(hf_token_path) as f:
             os.environ["HF_TOKEN"] = f.read().strip()
 
+    archive_d3g_outdir()
+
     kill_vllm_serve_processes()
     kill_gpu_processes()
 
     env = os.environ.copy()
+    # d3g reads its own env vars with a PYTHON_D3G_ prefix (see writer.c), but
+    # deploy.py's own D3G_OUTDIR use (archive_d3g_outdir above) is easier to
+    # spell without that prefix, so translate every D3G_* var into the
+    # PYTHON_D3G_* form the tracer inside the vllm subprocess actually reads.
+    for key, value in os.environ.items():
+        if key.startswith("D3G_"):
+            env[f"PYTHON_D3G_{key[len('D3G_'):]}"] = value
     serve_cmd = f'vllm serve --omni {model} --deploy {deploy_path}'
     if args.enforce_eager:
         serve_cmd += ' --enforce-eager'
