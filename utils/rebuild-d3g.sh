@@ -21,13 +21,20 @@ done
 TRACER_DIR="$PROJECT_DIR/python-tracer"
 IMAGE_TAG="python-tracer-builder"
 
-ENGINE=podman
-command -v podman >/dev/null 2>&1 || ENGINE=docker
+podman build -t "$IMAGE_TAG" -f "$TRACER_DIR/Containerfile" "$TRACER_DIR"
 
-"$ENGINE" build -t "$IMAGE_TAG" -f "$TRACER_DIR/Containerfile" "$TRACER_DIR"
+# Force a fresh ./configure inside the container. cpython/Makefile (if left
+# over from a host build, or a previous container run against a different
+# mount path) hardcodes an absolute --prefix baked in at configure time; if
+# that prefix isn't /src/build, `make altinstall` below installs outside the
+# bind mount, into the container's throwaway overlay, and the interpreter
+# never actually reaches the host's build/ directory (confirmed: prefix left
+# over from a host build pointed at the host's own absolute path, which
+# doesn't exist inside the container's filesystem).
+rm -f "$TRACER_DIR/cpython/Makefile"
 
 mkdir -p "$TRACER_DIR/.cargo-cache"
-"$ENGINE" run --rm \
+podman run --rm \
     -v "$TRACER_DIR:/src:Z" \
     -v "$TRACER_DIR/.cargo-cache:/root/.cargo/registry:Z" \
     -w /src \
