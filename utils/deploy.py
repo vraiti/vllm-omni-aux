@@ -111,6 +111,9 @@ def main():
                              "(tool calling is on by default when the model has a DEFAULT_TOOL_CALL_PARSER entry)")
     parser.add_argument("--tool-call-parser", default=None,
                         help="Override the tool-call parser name (defaults per model_key, see DEFAULT_TOOL_CALL_PARSER)")
+    parser.add_argument("--client", default=None,
+                        help="Path to a client script (e.g. vllm-omni-aux/clients/livekit_replay_client.sh) "
+                             "to run once the server is healthy; the server is sent SIGINT once it exits")
     args = parser.parse_args()
 
     model = resolve_model(args.model_key)
@@ -158,9 +161,28 @@ def main():
             resp = urllib.request.urlopen(HEALTH_URL, timeout=5)
             if resp.status == 200:
                 print(f"Health check passed. Server is ready.")
-                return 0
+                break
         except (urllib.error.URLError, OSError):
             pass
+
+    if not args.client:
+        return 0
+
+    client_path = os.path.abspath(args.client)
+    if not os.path.isfile(client_path):
+        print(f"ERROR: client script not found: {client_path}", file=sys.stderr)
+        os.killpg(os.getpgid(proc.pid), signal.SIGINT)
+        proc.wait()
+        return 1
+
+    print(f"deploy.py: running client {client_path}...")
+    client_result = subprocess.run([client_path], cwd=os.path.dirname(client_path))
+
+    print("deploy.py: client finished, sending SIGINT to server...")
+    os.killpg(os.getpgid(proc.pid), signal.SIGINT)
+    proc.wait()
+
+    return client_result.returncode
 
 
 if __name__ == "__main__":
