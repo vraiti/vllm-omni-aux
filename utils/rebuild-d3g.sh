@@ -23,9 +23,24 @@ IMAGE_TAG="python-tracer-builder"
 
 podman build -t "$IMAGE_TAG" -f "$TRACER_DIR/Containerfile" "$TRACER_DIR"
 
-mkdir -p "$TRACER_DIR/.cargo-cache"
+# cpython/ is overlaid rather than plain-bind-mounted: the container's
+# ./configure bakes in an absolute --prefix, and that prefix must be the
+# container's own mount point (/src/build), not whatever a host-side `make`
+# last configured (a host build and this container build share the exact
+# same on-disk cpython/ otherwise, so whichever configured last silently
+# wins for the other -- confirmed: a host-configured Makefile's prefix
+# doesn't exist inside the container, so `make altinstall` there installs
+# into nothing the host can see). The overlay's upperdir is a real,
+# persistent host directory (unlike a plain container layer, it survives
+# `--rm`), so this container's own Makefile/config.status/*.o cache
+# separately from the host's, without either clobbering the other. Source
+# edits (from either side) still show through immediately, since the
+# overlay's lower is the live cpython/ tree -- only the container's own
+# build byproducts get diverted into upperdir.
+mkdir -p "$TRACER_DIR/.cargo-cache" "$TRACER_DIR/.container-overlay/cpython-upper" "$TRACER_DIR/.container-overlay/cpython-work"
 podman run --rm \
     -v "$TRACER_DIR:/src:Z" \
+    -v "$TRACER_DIR/cpython:/src/cpython:O,upperdir=$TRACER_DIR/.container-overlay/cpython-upper,workdir=$TRACER_DIR/.container-overlay/cpython-work" \
     -v "$TRACER_DIR/.cargo-cache:/root/.cargo/registry:Z" \
     -w /src \
     "$IMAGE_TAG" \
