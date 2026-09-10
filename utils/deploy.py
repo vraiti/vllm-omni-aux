@@ -135,11 +135,6 @@ def main():
     model = resolve_model(args.model_key)
     deploy_path = resolve_deploy_config(args.model_key, args.deploy_config)
 
-    hf_token_path = os.path.expanduser("~/.secret/hf")
-    if os.path.isfile(hf_token_path):
-        with open(hf_token_path) as f:
-            os.environ["HF_TOKEN"] = f.read().strip()
-
     archive_d3g_outdir()
 
     kill_vllm_serve_processes()
