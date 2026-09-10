@@ -56,4 +56,4 @@ fi
 echo "compose-livekit: VAD_MODE=$VAD_MODE VLLM_OMNI_HOST=$VLLM_OMNI_HOST ($HOST_ALIAS)" >&2
 
 cd "$LIVEKIT_DIR"
-exec env VAD_MODE="$VAD_MODE" VLLM_OMNI_HOST="$VLLM_OMNI_HOST" podman compose up --build "$@"
+exec env VAD_MODE="$VAD_MODE" VLLM_OMNI_HOST="$VLLM_OMNI_HOST" podman compose up --build "$@" --timeout 1
