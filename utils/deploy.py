@@ -24,6 +24,7 @@ MODEL_MAP = {
     "qwen3-omni": "Qwen/Qwen3-Omni-30B-A3B-Instruct",
     "minicpm-o": "openbmb/MiniCPM-o-4_5",
     "flux2": "black-forest-labs/FLUX.2-dev",
+    "personaplex": "nvidia/personaplex-7b-v1"
 }
 
 DEFAULT_TOOL_CALL_PARSER = {
