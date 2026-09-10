@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Wraps `podman compose up --build` for the LiveKit demo stack, resolving
+# VLLM_OMNI_HOST from an ssh alias via ip-of instead of requiring an IP.
+#
+# usage: compose-livekit [client|semantic] [ssh-alias] [extra podman-compose args...]
+
+VAD_MODE="client"
+HOST_ALIAS="dev"
+
+if [[ $# -ge 1 ]]; then
+    VAD_MODE="$1"
+    shift
+fi
+if [[ $# -ge 1 ]]; then
+    HOST_ALIAS="$1"
+    shift
+fi
+
+case "$VAD_MODE" in
+    client|semantic) ;;
+    *)
+        echo "usage: compose-livekit [client|semantic] [ssh-alias] [extra podman-compose args...]" >&2
+        echo "  vad mode must be 'client' or 'semantic', got '$VAD_MODE'" >&2
+        exit 1
+        ;;
+esac
+
+if ! VLLM_OMNI_HOST="$(ip-of "$HOST_ALIAS")" || [[ -z "$VLLM_OMNI_HOST" ]]; then
+    echo "compose-livekit: couldn't resolve ssh alias '$HOST_ALIAS' to an IP" >&2
+    exit 1
+fi
+
+# vllm-omni-aux is bind-mounted the same across checkouts, so `$0`'s
+# directory can resolve through a different checkout than the one $PWD is
+# in (whichever's vllm-omni-aux/utils happens to be first on PATH) -- and
+# that sibling checkout may not have a vllm-omni next to it at all. Walk up
+# from $PWD instead, matching rebuild-d3g.sh's convention, to find the
+# checkout root actually being worked in.
+PROJECT_DIR="$PWD"
+while [[ "$PROJECT_DIR" != "$HOME/omni" && "$PROJECT_DIR" != "/" ]]; do
+    if [[ "$(dirname "$PROJECT_DIR")" == "$HOME/omni" ]]; then
+        break
+    fi
+    PROJECT_DIR="$(dirname "$PROJECT_DIR")"
+done
+LIVEKIT_DIR="$PROJECT_DIR/vllm-omni/examples/online_serving/openai-fullduplex/livekit"
+
+if [[ ! -d "$LIVEKIT_DIR" ]]; then
+    echo "compose-livekit: couldn't find $LIVEKIT_DIR" >&2
+    echo "  run this from inside a project checkout under \$HOME/omni (e.g. cd ~/omni/<checkout>)" >&2
+    exit 1
+fi
+
+echo "compose-livekit: VAD_MODE=$VAD_MODE VLLM_OMNI_HOST=$VLLM_OMNI_HOST ($HOST_ALIAS)" >&2
+
+cd "$LIVEKIT_DIR"
+exec env VAD_MODE="$VAD_MODE" VLLM_OMNI_HOST="$VLLM_OMNI_HOST" podman compose up --build "$@"
