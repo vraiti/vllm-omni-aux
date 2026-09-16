@@ -14,9 +14,6 @@ MODEL_HOST_PATH="$(hf download openbmb/MiniCPM-o-4_5)"
 
 cd MiniCPM-o-Demo
 
-uv pip install "torch==2.8.0" "torchaudio==2.8.0"
-uv pip install -r requirements.txt
-
 pkill -f "gateway.py|worker.py" || true
 
 mkdir -p certs tmp
