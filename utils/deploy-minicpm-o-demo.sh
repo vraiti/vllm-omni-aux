@@ -47,3 +47,5 @@ curl -X PUT http://127.0.0.1:8007/internal/workers/local-worker \
     --data '{"endpoint":"127.0.0.1:22400","gpu_group":"gpu-0"}'
 
 echo "Gateway ready at: https://$(hostname -I | awk '{print $1}'):8006/"
+echo "Worker log:  $PWD/tmp/worker_0.log"
+echo "Gateway log: $PWD/tmp/gateway.log"
