@@ -45,3 +45,6 @@ curl -X PUT http://127.0.0.1:8007/internal/workers/local-worker \
     --data '{"endpoint":"127.0.0.1:22400","gpu_group":"gpu-0"}'
 
 echo "Gateway ready at: https://$(hostname -I | awk '{print $1}'):8006/"
+
+echo "Live-tailing worker + gateway logs (Ctrl-C to stop watching; servers keep running)..."
+exec tail -n +1 -f tmp/worker_0.log tmp/gateway.log
