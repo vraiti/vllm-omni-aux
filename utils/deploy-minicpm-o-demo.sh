@@ -8,6 +8,8 @@ set -euo pipefail
 # active. Run from a directory containing both ./MiniCPM-o-Demo/ and
 # ./vllm-omni-aux/.
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 MODEL_HOST_PATH="$(hf download openbmb/MiniCPM-o-4_5)"
 
 cd MiniCPM-o-Demo
@@ -26,22 +28,21 @@ fi
 CUDA_VISIBLE_DEVICES=0 PYTHONPATH=. nohup python worker.py \
     --model-path "$MODEL_HOST_PATH" --worker-index 0 --gpu-id 0 \
     > tmp/worker_0.log 2>&1 &
+WORKER_PID=$!
 disown
 
 echo "Waiting for worker to become healthy..."
-for _ in $(seq 1 60); do
-    if curl -sf http://127.0.0.1:22400/health >/dev/null 2>&1; then
-        break
-    fi
-    sleep 5
-done
+"$SCRIPT_DIR/poll-server-health.sh" "$WORKER_PID" http://127.0.0.1:22400/health tmp/worker_0.log
 
 PYTHONPATH=. nohup python gateway.py \
     --port 8006 --internal-port 8007 \
     > tmp/gateway.log 2>&1 &
+GATEWAY_PID=$!
 disown
 
-sleep 2
+echo "Waiting for gateway to become healthy..."
+"$SCRIPT_DIR/poll-server-health.sh" "$GATEWAY_PID" https://127.0.0.1:8006/health tmp/gateway.log
+
 curl -X PUT http://127.0.0.1:8007/internal/workers/local-worker \
     -H 'content-type: application/json' \
     --data '{"endpoint":"127.0.0.1:22400","gpu_group":"gpu-0"}'
