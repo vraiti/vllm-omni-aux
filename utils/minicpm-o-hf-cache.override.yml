@@ -1,0 +1,16 @@
+# Compose override for deploy-minicpm-o-demo.sh.
+#
+# MiniCPM-o-Demo's docker-compose.yml expects MODEL_HOST_PATH to point at a
+# directory already containing the model files, bind-mounted read-only to
+# /models/MiniCPM-o-4_5. deploy-minicpm-o-demo.sh derives that path from the
+# local HF cache after `hf download`, but internal transformers/
+# huggingface_hub calls that resolve openbmb/MiniCPM-o-4_5 by repo id (rather
+# than via MODEL_PATH) still need the cache itself -- this mounts it in
+# read-only so those calls hit disk instead of the network.
+services:
+  worker-backend-0:
+    volumes:
+      - ${HF_CACHE_HOST_PATH}:/root/.cache:ro
+  worker-backend-1:
+    volumes:
+      - ${HF_CACHE_HOST_PATH}:/root/.cache:ro
