@@ -7,7 +7,4 @@ CUDA_VERSION=$(nvcc --version | grep -oP 'release \K[0-9]+\.[0-9]+')
 CUDA_MAJOR=$(echo "$CUDA_VERSION" | cut -d. -f1)
 CUDA_TAG="cu${CUDA_MAJOR}0"
 FLASHINFER_VERSION=$(uv pip show flashinfer-python | grep -oP '^Version: \K.*')
-# package-script reads fd 3 one argv token per line (via `mapfile`), not
-# whitespace-split -- each of these needs its own line, or they'd all
-# collapse into a single (invalid) `uv pip install` argument.
-printf '%s\n' "flashinfer-jit-cache==$FLASHINFER_VERSION" "--index-url" "https://flashinfer.ai/whl/${CUDA_TAG}" >&3
+uv pip install "flashinfer-jit-cache==$FLASHINFER_VERSION" --index-url "https://flashinfer.ai/whl/${CUDA_TAG}"
