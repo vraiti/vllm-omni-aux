@@ -1,0 +1,18 @@
+# Qwen3-Omni on /v1/live/sessions, 1x RTX PRO 6000 (96 GiB).
+# 1gpu.yaml's stages take 0.90 of the GPU; stage 0 gives back 0.04 so the
+# Whisper ASR service (0.08) fits next to it.
+base_config: 1gpu.yaml
+session_mode: turn
+
+live_session_config:
+  session_lifetime_s: 1800
+  external_vad:
+    output_audio_delta_size_ms: 500
+    vad_service_url: ws://localhost:15151
+  asr_service_url: http://localhost:15152
+
+stages:
+  - stage_id: 0
+    gpu_memory_utilization: 0.66
+    limit_mm_per_prompt:
+      audio: 32
