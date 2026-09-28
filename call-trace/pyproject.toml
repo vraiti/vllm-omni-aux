@@ -1,0 +1,9 @@
+[project]
+name = "call-trace"
+version = "0.1.0"
+description = "sys.settrace function that logs each (pid, thread, coroutine)'s calls into one module's named functions"
+requires-python = ">=3.13"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
