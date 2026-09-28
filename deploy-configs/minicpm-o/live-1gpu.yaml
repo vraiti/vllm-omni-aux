@@ -1,0 +1,8 @@
+# MiniCPM-o 4.5 on /v1/live/sessions, 1x RTX PRO 6000 (96 GiB).
+# The upstream Live overlay's stages take 0.88 of the GPU; stage 0 gives back
+# 0.04 so the Whisper ASR service (0.08) fits next to it.
+base_config: ../../../vllm-omni/vllm_omni/deploy/minicpmo_4_5_live.yaml
+
+stages:
+  - stage_id: 0
+    gpu_memory_utilization: 0.51
