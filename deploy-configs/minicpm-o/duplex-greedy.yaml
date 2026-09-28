@@ -1,0 +1,12 @@
+# MiniCPM-o 4.5 on /v1/realtime?duplex=1 (OmniDuplexSessionHandler), greedy:
+# the reference run for comparing with /v1/live/sessions. Stage 0's
+# temperature is set per session by the client (--temperature 0); the duplex
+# session does not override the Talker's, so it is set here.
+base_config: ../../../vllm-omni/vllm_omni/deploy/minicpmo_4_5.yaml
+
+stages:
+  - stage_id: 1
+    default_sampling_params:
+      temperature: 0.0
+      top_p: 1.0
+      top_k: -1
