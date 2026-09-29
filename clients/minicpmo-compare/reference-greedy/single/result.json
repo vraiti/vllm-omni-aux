@@ -1,0 +1,49 @@
+{
+  "ok": true,
+  "model_decision": "listen",
+  "post_commit": {
+    "input_committed_event_index": 43,
+    "decision": "listen",
+    "decision_required": true,
+    "input_had_residual_model_unit": true,
+    "response_listen_count": 1,
+    "response_done_count": 0
+  },
+  "input_video": null,
+  "video_frames_extracted": 0,
+  "video_frames_sent": 0,
+  "video_stacked_frames_extracted": 0,
+  "audio_bytes": 524160,
+  "audio_chunk_count": 11,
+  "audio_chunk_files": [
+    "/tmp/logs/duplex-ref/greedy/single/audio_chunks/chunk_0001.wav",
+    "/tmp/logs/duplex-ref/greedy/single/audio_chunks/chunk_0002.wav",
+    "/tmp/logs/duplex-ref/greedy/single/audio_chunks/chunk_0003.wav",
+    "/tmp/logs/duplex-ref/greedy/single/audio_chunks/chunk_0004.wav",
+    "/tmp/logs/duplex-ref/greedy/single/audio_chunks/chunk_0005.wav",
+    "/tmp/logs/duplex-ref/greedy/single/audio_chunks/chunk_0006.wav",
+    "/tmp/logs/duplex-ref/greedy/single/audio_chunks/chunk_0007.wav",
+    "/tmp/logs/duplex-ref/greedy/single/audio_chunks/chunk_0008.wav",
+    "/tmp/logs/duplex-ref/greedy/single/audio_chunks/chunk_0009.wav",
+    "/tmp/logs/duplex-ref/greedy/single/audio_chunks/chunk_0010.wav",
+    "/tmp/logs/duplex-ref/greedy/single/audio_chunks/chunk_0011.wav"
+  ],
+  "output_sample_rate_hz": 24000,
+  "latency": {
+    "ttft_ms": null,
+    "ttfp_ms": null,
+    "rtf": null,
+    "response_generation_ms": null,
+    "text_stream_ms": null,
+    "transcript_delta_count": 11,
+    "audio_duration_s": 10.92,
+    "measurement_origin": "input_audio_buffer.commit send"
+  },
+  "timing": {},
+  "response_ids": [
+    "resp-duplex-8a855fd385ea4d6dbbadc53ec82967e8-0-eb61e915"
+  ],
+  "transcript": "Hello,The capitalof France isParis. Itis a beautifulcity knownfor its art,history, andfamous landmarkslike theEiffel Tower.",
+  "errors": [],
+  "output_dir": "/tmp/logs/duplex-ref/greedy/single"
+}

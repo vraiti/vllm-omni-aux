@@ -1,0 +1,247 @@
+/home/ec2-user/vraiti/vllm-omni/vllm_omni/__init__.py:19: RuntimeWarning: Failed to import version from _version.py: No module named 'vllm_omni._version'
+This typically happens in development mode before building.
+Using fallback version 'dev'.
+  from .version import __version__, __version_tuple__  # isort:skip # noqa: F401
+INFO 09-28 21:12:32 [patch.py:253] NVFP4 W4A4 weight_scale NaN-clamp: skipped — upstream serves ModelOpt linears through the generic ModelOptLinearMethod and rejects any NaN weight_scale (unloaded-scale sentinel), so a load-time error replaces the `!!!!` decode-time collapse.
+INFO 09-28 21:12:32 [patch.py:565] inductor factorable-divisibility patch: installed.
+INFO 09-28 21:12:32 [patch.py:630] [cumem-cuda] CuMemAllocator._python_free_callback patched: asleep guard extended to all platforms.
+
+[audio chunk 1: 40320 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0001.wav]
+Hello,The capital
+[audio chunk 2: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0002.wav]
+of France is
+[audio chunk 3: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0003.wav]
+Paris. It
+[audio chunk 4: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0004.wav]
+is a beautiful
+[audio chunk 5: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0005.wav]
+city known
+[audio chunk 6: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0006.wav]
+for its art,
+[audio chunk 7: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0007.wav]
+history, and
+[audio chunk 8: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0008.wav]
+famous landmarks
+[audio chunk 9: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0009.wav]
+like the Eiffel
+[audio chunk 10: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0010.wav]
+Tower.
+[audio chunk 11: 42240 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0011.wav]
+
+[audio chunk 12: 40320 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0012.wav]
+As of
+[audio chunk 13: 9600 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0013.wav]
+
+[audio chunk 14: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0014.wav]
+recent estimates,
+[audio chunk 15: 40320 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0015.wav]
+
+[audio chunk 16: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0016.wav]
+the population
+[audio chunk 17: 9600 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0017.wav]
+
+[audio chunk 18: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0018.wav]
+of Paris
+[audio chunk 19: 11520 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0019.wav]
+
+[audio chunk 20: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0020.wav]
+is around 2.
+[audio chunk 21: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0021.wav]
+
+[audio chunk 22: 9600 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0022.wav]
+
+[audio chunk 23: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0023.wav]
+1 million
+[audio chunk 24: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0024.wav]
+
+[audio chunk 25: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0025.wav]
+
+[audio chunk 26: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0026.wav]
+
+[audio chunk 27: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0027.wav]
+people in
+[audio chunk 28: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0028.wav]
+
+[audio chunk 29: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0029.wav]
+
+[audio chunk 30: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0030.wav]
+
+[audio chunk 31: 11520 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0031.wav]
+
+[audio chunk 32: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0032.wav]
+the city proper.
+[audio chunk 33: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0033.wav]
+
+[audio chunk 34: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0034.wav]
+
+[audio chunk 35: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0035.wav]
+
+[audio chunk 36: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0036.wav]
+Yes,
+[audio chunk 37: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0037.wav]
+
+[audio chunk 38: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0038.wav]
+
+[audio chunk 39: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0039.wav]
+
+[audio chunk 40: 11520 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0040.wav]
+
+[audio chunk 41: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0041.wav]
+I
+[audio chunk 42: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0042.wav]
+
+[audio chunk 43: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0043.wav]
+
+[audio chunk 44: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0044.wav]
+
+[audio chunk 45: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0045.wav]
+can hear you clearly.
+[audio chunk 46: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0046.wav]
+
+[audio chunk 47: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0047.wav]
+
+[audio chunk 48: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0048.wav]
+
+[audio chunk 49: 11520 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0049.wav]
+
+[audio chunk 50: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0050.wav]
+How
+[audio chunk 51: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0051.wav]
+
+[audio chunk 52: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0052.wav]
+
+[audio chunk 53: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0053.wav]
+
+[audio chunk 54: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0054.wav]
+can I assist
+[audio chunk 55: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0055.wav]
+
+[audio chunk 56: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0056.wav]
+
+[audio chunk 57: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0057.wav]
+
+[audio chunk 58: 11520 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0058.wav]
+
+[audio chunk 59: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0059.wav]
+you today?
+[audio chunk 60: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0060.wav]
+
+[audio chunk 61: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0061.wav]
+
+[audio chunk 62: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0062.wav]
+
+[audio chunk 63: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0063.wav]
+
+[audio chunk 64: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0064.wav]
+
+[audio chunk 65: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0065.wav]
+
+[audio chunk 66: 48000 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0066.wav]
+
+[audio chunk 67: 24960 bytes -> /tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0067.wav]
+{
+  "ok": true,
+  "model_decision": "listen",
+  "post_commit": {
+    "input_committed_event_index": 171,
+    "decision": "listen",
+    "decision_required": true,
+    "input_had_residual_model_unit": true,
+    "response_listen_count": 1,
+    "response_done_count": 0
+  },
+  "input_video": null,
+  "video_frames_extracted": 0,
+  "video_frames_sent": 0,
+  "video_stacked_frames_extracted": 0,
+  "audio_bytes": 2866560,
+  "audio_chunk_count": 67,
+  "audio_chunk_files": [
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0001.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0002.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0003.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0004.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0005.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0006.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0007.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0008.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0009.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0010.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0011.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0012.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0013.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0014.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0015.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0016.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0017.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0018.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0019.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0020.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0021.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0022.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0023.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0024.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0025.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0026.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0027.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0028.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0029.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0030.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0031.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0032.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0033.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0034.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0035.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0036.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0037.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0038.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0039.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0040.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0041.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0042.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0043.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0044.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0045.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0046.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0047.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0048.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0049.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0050.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0051.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0052.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0053.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0054.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0055.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0056.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0057.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0058.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0059.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0060.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0061.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0062.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0063.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0064.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0065.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0066.wav",
+    "/tmp/logs/duplex-ref/greedy/conversation/audio_chunks/chunk_0067.wav"
+  ],
+  "output_sample_rate_hz": 24000,
+  "latency": {
+    "ttft_ms": null,
+    "ttfp_ms": null,
+    "rtf": null,
+    "response_generation_ms": null,
+    "text_stream_ms": null,
+    "transcript_delta_count": 67,
+    "audio_duration_s": 59.72,
+    "measurement_origin": "input_audio_buffer.commit send"
+  },
+  "timing": {},
+  "response_ids": [
+    "resp-duplex-be132afb73a043e4a7af2e17a372806d-0-f77f104f",
+    "resp-duplex-be132afb73a043e4a7af2e17a372806d-0-19ee8eea"
+  ],
+  "transcript": "Hello,The capitalof France isParis. Itis a beautifulcity knownfor its art,history, andfamous landmarkslike the EiffelTower.As ofrecent estimates,the populationof Parisis around 2.1 millionpeople inthe city proper.Yes,Ican hear you clearly.Howcan I assistyou today?",
+  "errors": [],
+  "output_dir": "/tmp/logs/duplex-ref/greedy/conversation"
+}
