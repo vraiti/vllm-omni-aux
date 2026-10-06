@@ -1,0 +1,14 @@
+# MiniCPM-o 4.5 on /v1/live/sessions with a 1024-token Stage 0 context, so a
+# few minutes of conversation overflow it and exercise the Live context trim
+# and resubmission. 1x RTX PRO 6000 (96 GiB).
+base_config: ../../../vllm-omni/vllm_omni/deploy/minicpmo_4_5_live.yaml
+
+stages:
+  - stage_id: 0
+    max_model_len: 1024
+    # The base limits (64 images/audios, one 128-frame video) cannot fit a
+    # 1024-token prompt. Live prompts carry one audio item: the reference voice.
+    limit_mm_per_prompt:
+      image: 0
+      audio: 1
+      video: 0
